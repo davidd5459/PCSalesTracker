@@ -1,5 +1,5 @@
 import type { Db } from "../db/client.js";
-import { markHistorySynced, saveListingHistory, upsertGame } from "../db/writes.js";
+import { markHistorySynced, protectGame, saveListingHistory, upsertGame } from "../db/writes.js";
 import type { ItadClient } from "../itad/client.js";
 import { mapDealUrls, mapGameInfo, mapHistory } from "../itad/mapping.js";
 
@@ -7,7 +7,7 @@ import { mapDealUrls, mapGameInfo, mapHistory } from "../itad/mapping.js";
 export const HISTORY_SINCE = "2015-01-01T00:00:00Z";
 
 export type ImportResult =
-  | { status: "imported"; slug: string; title: string; stores: number; points: number }
+  | { status: "imported"; gameId: number; slug: string; title: string; stores: number; points: number }
   | { status: "skipped"; reason: string };
 
 /**
@@ -20,7 +20,7 @@ export async function importGame(
   itad: ItadClient,
   storeIdByShop: Map<number, string>,
   itadId: string,
-  opts: { includeMature?: boolean } = {},
+  opts: { includeMature?: boolean; protect?: boolean } = {},
 ): Promise<ImportResult> {
   const info = await itad.info(itadId);
   const game = mapGameInfo(info);
@@ -49,6 +49,7 @@ export async function importGame(
       });
     }
     await markHistorySynced(tx, gameId);
-    return { status: "imported", slug: game.slug, title: game.title, stores: byStore.size, points };
+    if (opts.protect) await protectGame(tx, gameId);
+    return { status: "imported", gameId, slug: game.slug, title: game.title, stores: byStore.size, points };
   });
 }

@@ -1,9 +1,11 @@
-import { LoaderCircle, Search, X } from "lucide-react";
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { LoaderCircle, Plus, Search, X } from "lucide-react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { useNavigate } from "react-router";
-import { useSearch } from "../api/queries";
+import { USING_SAMPLE_DATA } from "../api/catalog";
+import { useExternalSearch, useSearch } from "../api/queries";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { formatCents } from "../lib/format";
+import type { ExternalGame, GameSummary } from "../types";
 import { DiscountBadge, TypeBadge } from "./Badges";
 import { CoverImage } from "./CoverImage";
 
@@ -12,19 +14,41 @@ interface Props {
   autoFocus?: boolean;
 }
 
-/** Search box with a keyboard-navigable autocomplete list (ARIA combobox pattern). */
+/** Also look for untracked games when we have fewer local matches than this. */
+const EXTERNAL_BELOW = 5;
+
+type Option = { kind: "local"; game: GameSummary } | { kind: "external"; game: ExternalGame };
+
+/**
+ * Search box with a keyboard-navigable autocomplete list (ARIA combobox pattern).
+ * Shows tracked games first; when those come up short, also offers matching
+ * games from IsThereAnyDeal that can be added on the spot.
+ */
 export function SearchBar({ size = "lg", autoFocus = false }: Props) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const debounced = useDebouncedValue(query, 200);
-  const { data: results = [], isFetching } = useSearch(debounced);
+  const local = useSearch(debounced);
+  const results = local.data ?? [];
+  const localSettled = local.isSuccess && !local.isPlaceholderData;
+  const external = useExternalSearch(
+    debounced,
+    !USING_SAMPLE_DATA && localSettled && results.length < EXTERNAL_BELOW,
+  );
+  const externalResults = external.data ?? [];
   const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement>(null);
   const listId = useId();
 
+  const options: Option[] = [
+    ...results.map((game): Option => ({ kind: "local", game })),
+    ...externalResults.map((game): Option => ({ kind: "external", game })),
+  ];
+
   const hasQuery = debounced.trim().length >= 2;
   const showList = open && hasQuery;
+  const busy = local.isFetching || external.isFetching;
 
   useEffect(() => {
     setActiveIndex(-1);
@@ -38,29 +62,43 @@ export function SearchBar({ size = "lg", autoFocus = false }: Props) {
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, []);
 
-  const goTo = (slug: string) => {
+  const choose = (option: Option) => {
     setOpen(false);
     setQuery("");
-    navigate(`/game/${slug}`);
+    // Untracked games open their page with ?add=, which imports them first.
+    navigate(
+      option.kind === "local"
+        ? `/game/${option.game.slug}`
+        : `/game/${option.game.slug}?add=${encodeURIComponent(option.game.itadId)}`,
+    );
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setOpen(true);
-      setActiveIndex((i) => Math.min(i + 1, results.length - 1));
+      setActiveIndex((i) => Math.min(i + 1, options.length - 1));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setActiveIndex((i) => Math.max(i - 1, -1));
     } else if (e.key === "Enter") {
-      const target = results[activeIndex] ?? results[0];
-      if (showList && target) goTo(target.slug);
+      const target = options[activeIndex] ?? options[0];
+      if (showList && target) choose(target);
     } else if (e.key === "Escape") {
       setOpen(false);
     }
   };
 
   const isLarge = size === "lg";
+  const optionProps = (i: number, option: Option) => ({
+    id: `${listId}-${i}`,
+    role: "option" as const,
+    "aria-selected": i === activeIndex,
+    onPointerDown: (e: ReactPointerEvent) => e.preventDefault(),
+    onClick: () => choose(option),
+    onMouseEnter: () => setActiveIndex(i),
+    className: `flex cursor-pointer items-center gap-3 px-2.5 py-1.5 ${i === activeIndex ? "bg-surface-2" : ""}`,
+  });
 
   return (
     <div ref={containerRef} className="relative w-full">
@@ -91,7 +129,7 @@ export function SearchBar({ size = "lg", autoFocus = false }: Props) {
           onKeyDown={onKeyDown}
           className={`min-w-0 flex-1 bg-transparent outline-none placeholder:text-faint ${isLarge ? "text-[15px]" : "text-[13px]"}`}
         />
-        {isFetching && hasQuery && <LoaderCircle className="size-3.5 shrink-0 animate-spin text-faint" aria-hidden />}
+        {busy && hasQuery && <LoaderCircle className="size-3.5 shrink-0 animate-spin text-faint" aria-hidden />}
         {query && (
           <button
             type="button"
@@ -108,22 +146,14 @@ export function SearchBar({ size = "lg", autoFocus = false }: Props) {
         <ul
           id={listId}
           role="listbox"
-          className="absolute inset-x-0 top-full z-30 mt-1 max-h-[min(70vh,26rem)] overflow-y-auto rounded border border-line bg-surface py-1 shadow-xl shadow-black/60"
+          className="absolute inset-x-0 top-full z-30 mt-1 max-h-[min(70vh,30rem)] overflow-y-auto rounded border border-line bg-surface py-1 shadow-xl shadow-black/60"
         >
-          {results.length === 0 && !isFetching && (
+          {options.length === 0 && !busy && (
             <li className="px-3 py-3 text-[13px] text-muted">No games match “{debounced.trim()}”.</li>
           )}
+
           {results.map((game, i) => (
-            <li
-              key={game.slug}
-              id={`${listId}-${i}`}
-              role="option"
-              aria-selected={i === activeIndex}
-              onPointerDown={(e) => e.preventDefault()}
-              onClick={() => goTo(game.slug)}
-              onMouseEnter={() => setActiveIndex(i)}
-              className={`flex cursor-pointer items-center gap-3 px-2.5 py-1.5 ${i === activeIndex ? "bg-surface-2" : ""}`}
-            >
+            <li key={game.slug} {...optionProps(i, { kind: "local", game })}>
               <CoverImage src={game.coverUrl} title={game.title} compact className="h-[30px] w-[64px] shrink-0 rounded-sm" />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[13px] font-medium">{game.title}</div>
@@ -140,6 +170,37 @@ export function SearchBar({ size = "lg", autoFocus = false }: Props) {
               )}
             </li>
           ))}
+
+          {(externalResults.length > 0 || (external.isFetching && results.length === 0)) && (
+            <li
+              role="presentation"
+              className={`px-3 pt-2 pb-1 text-[11px] font-medium uppercase tracking-wider text-faint ${
+                results.length > 0 ? "mt-1 border-t border-line" : ""
+              }`}
+            >
+              {external.isFetching && externalResults.length === 0
+                ? "Searching more games…"
+                : "Not tracked yet · add with full price history"}
+            </li>
+          )}
+          {externalResults.map((game, j) => {
+            const i = results.length + j;
+            return (
+              <li key={game.itadId} {...optionProps(i, { kind: "external", game })}>
+                <span className="flex h-[30px] w-[64px] shrink-0 items-center justify-center rounded-sm border border-dashed border-line text-faint">
+                  <Plus className="size-3.5" aria-hidden />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[13px] font-medium">{game.title}</div>
+                  <TypeBadge type={game.type} />
+                </div>
+                <span className="shrink-0 text-xs text-accent">Add</span>
+              </li>
+            );
+          })}
+          {external.isError && results.length === 0 && (
+            <li className="px-3 py-2 text-xs text-faint">Couldn't search for more games right now.</li>
+          )}
         </ul>
       )}
     </div>

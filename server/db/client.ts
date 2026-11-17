@@ -75,3 +75,18 @@ export function createPoolDb(connectionString: string): Db {
     close: () => pool.end(),
   };
 }
+
+/**
+ * Run `fn` with a short-lived pooled client, then close it. Used by API routes
+ * that need transactions (serverless functions shouldn't keep pools open between requests).
+ */
+export async function withPoolDb<T>(fn: (db: Db) => Promise<T>): Promise<T> {
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new ConfigError("DATABASE_URL is not set");
+  const db = createPoolDb(url);
+  try {
+    return await fn(db);
+  } finally {
+    await db.close();
+  }
+}

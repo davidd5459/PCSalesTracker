@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useParams, useSearchParams } from "react-router";
 import { useGame } from "../api/queries";
+import { AddGame } from "../components/AddGame";
 import { AtlBadge, DiscountBadge, StoreLabel, TypeBadge } from "../components/Badges";
 import { CoverImage } from "../components/CoverImage";
 import { Panel } from "../components/Panel";
@@ -18,6 +19,8 @@ import { NotFoundPage } from "./NotFoundPage";
 export function GamePage() {
   const { slug = "" } = useParams();
   const { data: game, isPending, isError } = useGame(slug);
+  // Set when arriving from a "not tracked yet" search result.
+  const addId = useSearchParams()[0].get("add");
 
   useEffect(() => {
     if (game) document.title = `${game.title} · Price history · PCSalesTracker`;
@@ -27,7 +30,9 @@ export function GamePage() {
   if (isError) {
     return <p className="mx-auto max-w-6xl px-4 py-16 text-rise">Couldn't load this game. Please try again.</p>;
   }
-  if (!game) return <NotFoundPage message="We couldn't find that game." />;
+  if (!game) {
+    return addId ? <AddGame slug={slug} itadId={addId} /> : <NotFoundPage message="We couldn't find that game." />;
+  }
   // Keyed by slug so filters reset when navigating between games.
   return <GameView key={game.slug} game={game} />;
 }

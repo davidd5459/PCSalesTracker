@@ -6,7 +6,7 @@ import { Panel, TH } from "../components/Panel";
 import { SearchBar } from "../components/SearchBar";
 import { STORES } from "../config/stores";
 import { formatCents, formatDate, formatInteger, formatRelative } from "../lib/format";
-import type { GameSummary, PriceChange } from "../types";
+import type { GameSummary, PriceChange, UpcomingSale } from "../types";
 
 export function HomePage() {
   const { data, isPending, isError } = useHomeSections();
@@ -39,6 +39,12 @@ export function HomePage() {
       </section>
 
       <div className="mx-auto grid max-w-6xl grid-cols-1 gap-4 px-4 pt-6 lg:grid-cols-2">
+        <Panel title="Sales expected soon" meta="Forecast from each game's sale history" className="lg:col-span-2">
+          <Body loading={isPending} error={isError} empty={data?.upcomingSales.length === 0}>
+            <UpcomingTable sales={data?.upcomingSales ?? []} />
+          </Body>
+        </Panel>
+
         <Panel title="Biggest discounts" meta="Deepest cuts right now">
           <Body loading={isPending} error={isError} empty={data?.biggestSales.length === 0}>
             <DealTable games={data?.biggestSales ?? []} />
@@ -132,6 +138,55 @@ function DealTable({ games, showAtl = false }: { games: GameSummary[]; showAtl?:
         ))}
       </tbody>
     </table>
+  );
+}
+
+function UpcomingTable({ sales }: { sales: UpcomingSale[] }) {
+  const now = Date.now();
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[560px] table-fixed">
+        <thead>
+          <tr className="border-b border-line">
+            <th className={TH}>Game</th>
+            <th className={`${TH} w-36`}>Expected</th>
+            <th className={`${TH} w-20 text-right`}>Chance</th>
+            <th className={`${TH} w-20 text-right`}>Typical</th>
+            <th className={`${TH} w-28 text-right`}>Est. price</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sales.map((s) => {
+            const days = Math.max(1, Math.round((Date.parse(s.expectedStart) - now) / 86_400_000));
+            return (
+              <tr key={s.game.slug} className={ROW}>
+                <td className="px-3 py-1.5">
+                  <GameCell {...s.game} sub={<span className="truncate">{s.label}</span>} />
+                </td>
+                <td className="px-3 py-1.5 font-mono text-[13px]">
+                  <div>{formatDate(s.expectedStart)}</div>
+                  <div className="text-[11px] text-faint">in {days} day{days === 1 ? "" : "s"}</div>
+                </td>
+                <td className="px-3 py-1.5 text-right font-mono text-[13px] text-muted">
+                  {s.chance !== null ? `${Math.round(s.chance * 100)}%` : "—"}
+                </td>
+                <td className="px-3 py-1.5 text-right">
+                  {s.typicalCut !== null ? <DiscountBadge cut={s.typicalCut} /> : "—"}
+                </td>
+                <td className="px-3 py-1.5 text-right font-mono">
+                  {s.game.bestDeal && (
+                    <div className="text-[11px] text-faint line-through">{formatCents(s.game.bestDeal.priceCents)}</div>
+                  )}
+                  <div className="font-semibold text-deal">
+                    {s.expectedPriceCents !== null ? `~${formatCents(s.expectedPriceCents)}` : "—"}
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

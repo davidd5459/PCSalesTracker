@@ -1,11 +1,21 @@
 /** Pure functions converting ITAD responses into our records. No I/O, easy to test. */
-import type { PricePoint } from "../../src/types.js";
+import type { GameType, PricePoint } from "../../src/types.js";
 import type { GameRecord } from "../db/writes.js";
 import type { GameInfo, HistoryEntry, PriceEntry } from "./schemas.js";
 
-/** Map ITAD game info to a game record, or null for types we don't track (bundles, etc.). */
+/**
+ * Our game type for an ITAD type, or null for types we don't track (bundles,
+ * etc.). Some real games have no type set at ITAD, so a missing type counts as a game.
+ */
+export function mapGameType(itadType: string | null): GameType | null {
+  if (itadType === null || itadType === "game") return "game";
+  if (itadType === "dlc") return "dlc";
+  return null;
+}
+
+/** Map ITAD game info to a game record, or null for types we don't track. */
 export function mapGameInfo(info: GameInfo): GameRecord | null {
-  const type = info.type === "game" ? "game" : info.type === "dlc" ? "dlc" : null;
+  const type = mapGameType(info.type);
   if (!type) return null;
   const assets = info.assets ?? {};
   const releaseDate = info.releaseDate && /^\d{4}-\d{2}-\d{2}/.test(info.releaseDate) ? info.releaseDate.slice(0, 10) : null;

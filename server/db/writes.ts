@@ -135,3 +135,56 @@ export function collapseUnchanged(
   }
   return out;
 }
+
+/**
+ * Link DLC to its base game by title: "Outer Wilds - Echoes of the Eye" belongs
+ * to "Outer Wilds". Picks the longest matching base title, so "Dark Souls III"
+ * wins over "Dark Souls". Only fills in missing links. Returns how many were linked.
+ */
+export async function linkDlcToBaseGames(db: Queryable): Promise<number> {
+  const rows = await db.query<{ game_id: number; base_game_id: number | null }>(
+    `UPDATE games d SET base_game_id = (
+       SELECT b.game_id FROM games b
+       WHERE b.type = 'game'
+         AND length(d.title) > length(b.title)
+         AND left(d.title, length(b.title)) = b.title
+         AND substr(d.title, length(b.title) + 1, 2) IN (': ', ' -', ' –', ' —')
+       ORDER BY length(b.title) DESC
+       LIMIT 1)
+     WHERE d.type = 'dlc' AND d.base_game_id IS NULL
+     RETURNING d.game_id, d.base_game_id`,
+  );
+  // DLC with no matching base game are updated to NULL (unchanged); count only real links.
+  return rows.filter((r) => r.base_game_id !== null).length;
+}
+
+/** Note that someone viewed a game. Writes at most once a day per game to keep page views cheap. */
+export async function recordView(db: Queryable, slug: string): Promise<void> {
+  await db.query(
+    "UPDATE games SET last_viewed_at = now() WHERE slug = $1 AND last_viewed_at < now() - interval '1 day'",
+    [slug],
+  );
+}
+
+/** Mark a game as never to be evicted (used for the bulk-imported popular games). */
+export async function protectGame(db: Queryable, gameId: number): Promise<void> {
+  await db.query("UPDATE games SET protected = TRUE WHERE game_id = $1", [gameId]);
+}
+
+/**
+ * Delete the least recently viewed unprotected game (other than `keepGameId`),
+ * along with its listings, price history and forecast. Returns its slug, or
+ * null if every game is protected.
+ */
+export async function evictLeastRecentlyViewed(db: Queryable, keepGameId: number): Promise<string | null> {
+  const [row] = await db.query<{ slug: string }>(
+    `DELETE FROM games WHERE game_id = (
+       SELECT game_id FROM games
+       WHERE NOT protected AND game_id <> $1
+       ORDER BY last_viewed_at, game_id
+       LIMIT 1)
+     RETURNING slug`,
+    [keepGameId],
+  );
+  return row?.slug ?? null;
+}

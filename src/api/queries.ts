@@ -13,6 +13,18 @@ export function useSearch(query: string) {
   });
 }
 
+/** Untracked games at the data source; only runs when `enabled` (local results came up short). */
+export function useExternalSearch(query: string, enabled: boolean) {
+  const trimmed = query.trim();
+  return useQuery({
+    queryKey: ["search-external", trimmed.toLowerCase()],
+    queryFn: () => catalog.searchExternal(trimmed),
+    enabled: enabled && trimmed.length >= 3,
+    staleTime: 10 * 60_000,
+    retry: false,
+  });
+}
+
 export function useGame(slug: string) {
   return useQuery({
     queryKey: ["game", slug],

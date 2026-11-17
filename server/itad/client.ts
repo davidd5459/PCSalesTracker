@@ -6,6 +6,7 @@
  * - Validates every response against a schema.
  */
 import type { z } from "zod";
+import { ConfigError } from "../db/client.js";
 import {
   GameInfoResponse,
   HistoryResponse,
@@ -142,4 +143,16 @@ export class ItadClient {
       return parsed.data;
     }
   }
+}
+
+let shared: ItadClient | null = null;
+
+/** Shared client for the API, using ITAD_API_KEY. Created on first use. */
+export function getItadClient(): ItadClient {
+  if (!shared) {
+    const key = process.env.ITAD_API_KEY;
+    if (!key) throw new ConfigError("ITAD_API_KEY is not set");
+    shared = new ItadClient(key);
+  }
+  return shared;
 }

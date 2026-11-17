@@ -1,6 +1,7 @@
 /** Sample-data implementation of the catalog. The data module is loaded lazily, so it isn't bundled into the live site's main bundle. */
 import { summarize } from "../lib/priceStats";
-import type { GameDetail, PriceChange } from "../types";
+import { forecastSales } from "../lib/salePrediction";
+import type { GameDetail, PriceChange, UpcomingSale } from "../types";
 import type { CatalogApi } from "./catalog";
 
 const loadGames = () => import("../data/sampleData").then((m) => m.getSampleGames());
@@ -51,6 +52,14 @@ export const sampleCatalog: CatalogApi = {
     return (await loadGames()).find((g) => g.slug === slug) ?? null;
   },
 
+  async searchExternal() {
+    return []; // sample mode has no external data source
+  },
+
+  async importGame() {
+    throw new Error("Adding games needs the live API (VITE_DATA_SOURCE=api).");
+  },
+
   async getHomeSections() {
     await delay(150);
     const games = await loadGames();
@@ -71,7 +80,30 @@ export const sampleCatalog: CatalogApi = {
       ),
     );
 
+    // Same rules as the API's "Sales expected soon": likely, within 45 days, not on sale now.
+    const now = Date.now();
+    const upcomingSales: UpcomingSale[] = games
+      .flatMap((game, i) => {
+        const next = forecastSales(game.listings, now)?.next;
+        const summary = summaries[i]!;
+        const soon = next && next.expectedStart - now < 45 * 86_400_000 && (next.chance ?? 1) >= 0.5;
+        if (!soon || (summary.bestDeal?.cut ?? 0) >= 10) return [];
+        return [
+          {
+            game: summary,
+            expectedStart: new Date(next.expectedStart).toISOString(),
+            label: next.label,
+            chance: next.chance,
+            typicalCut: next.typicalCut,
+            expectedPriceCents: next.expectedPriceCents,
+          },
+        ];
+      })
+      .sort((a, b) => a.expectedStart.localeCompare(b.expectedStart))
+      .slice(0, 10);
+
     return {
+      upcomingSales,
       stats: {
         games: games.length,
         stores: new Set(games.flatMap((g) => g.listings.map((l) => l.storeId))).size,

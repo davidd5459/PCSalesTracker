@@ -2,6 +2,7 @@
 import { STORES } from "../../src/config/stores.js";
 import { getSampleGames } from "../../src/data/sampleData.js";
 import type { Db } from "../db/client.js";
+import { refreshForecasts } from "./forecasts.js";
 import { refreshGameStats, saveListingHistory, upsertGame, upsertStores } from "../db/writes.js";
 
 export async function importSampleGames(db: Db): Promise<number> {
@@ -37,5 +38,6 @@ export async function importSampleGames(db: Db): Promise<number> {
     }
   });
   await refreshGameStats(db);
+  await refreshForecasts(db);
   return games.length;
 }

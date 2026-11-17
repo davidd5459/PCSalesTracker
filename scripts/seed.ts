@@ -3,11 +3,13 @@
  *
  * Imports the most popular games from IsThereAnyDeal with their full price
  * history. Resumable: games already imported are skipped unless --refresh.
+ * Seeded games are protected: they're never evicted to make room for searched-for games.
  */
 import { parseArgs } from "node:util";
 import { createPoolDb } from "../server/db/client.js";
-import { refreshGameStats } from "../server/db/writes.js";
+import { linkDlcToBaseGames, refreshGameStats } from "../server/db/writes.js";
 import { loadEnv, requireEnv } from "../server/env.js";
+import { refreshForecasts } from "../server/ingest/forecasts.js";
 import { importGame } from "../server/ingest/importGame.js";
 import { syncStores } from "../server/ingest/stores.js";
 import { ItadClient } from "../server/itad/client.js";
@@ -60,7 +62,7 @@ try {
   for (const [i, id] of todo.entries()) {
     const prefix = `[${i + 1}/${todo.length}]`;
     try {
-      const result = await importGame(db, itad, storeIdByShop, id, { includeMature: args["include-mature"] });
+      const result = await importGame(db, itad, storeIdByShop, id, { includeMature: args["include-mature"], protect: true });
       if (result.status === "imported") {
         imported++;
         points += result.points;
@@ -76,8 +78,11 @@ try {
     }
   }
 
+  console.log(`Linked ${await linkDlcToBaseGames(db)} DLC to their base games`);
   console.log("Refreshing summary stats…");
   await refreshGameStats(db);
+  console.log("Computing sale forecasts…");
+  console.log(`  ${await refreshForecasts(db)} games have a likely next sale`);
   const mins = ((Date.now() - started) / 60000).toFixed(1);
   console.log(`Done in ${mins} min: ${imported} imported, ${skipped} skipped, ${failed} failed, ${points} price points.`);
 } finally {

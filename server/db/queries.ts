@@ -1,5 +1,13 @@
 /** Read queries for the API. Every query is parameterized; user input never touches SQL text. */
-import type { GameDetail, GameSummary, GameType, HomeSections, PriceChange, StoreListing } from "../../src/types.js";
+import type {
+  GameDetail,
+  GameSummary,
+  GameType,
+  HomeSections,
+  PriceChange,
+  StoreListing,
+  UpcomingSale,
+} from "../../src/types.js";
 import type { Queryable } from "./client.js";
 
 /** Format a timestamptz as ISO 8601 UTC in SQL, so every driver returns the same string. */
@@ -97,34 +105,7 @@ export async function getGame(db: Queryable, slug: string): Promise<GameDetail |
     [slug],
   );
   if (!game) return null;
-
-  const points = await db.query<{
-    store_id: string;
-    url: string | null;
-    available: boolean;
-    ts: string;
-    price_cents: number;
-    regular_cents: number;
-    cut: number;
-  }>(
-    `SELECT l.store_id, l.url, l.available, ${iso("p.recorded_at")} AS ts, p.price_cents, p.regular_cents, p.cut
-     FROM listings l
-     JOIN stores st USING (store_id)
-     JOIN price_points p USING (listing_id)
-     WHERE l.game_id = $1
-     ORDER BY st.sort_order, p.recorded_at`,
-    [game.game_id],
-  );
-
-  const listings = new Map<string, StoreListing>();
-  for (const p of points) {
-    let listing = listings.get(p.store_id);
-    if (!listing) {
-      listing = { storeId: p.store_id, url: p.url, available: p.available, history: [] };
-      listings.set(p.store_id, listing);
-    }
-    listing.history.push({ timestamp: p.ts, priceCents: p.price_cents, regularCents: p.regular_cents, cut: p.cut });
-  }
+  const listings = (await loadListings(db, [game.game_id])).get(game.game_id) ?? [];
 
   return {
     slug: game.slug,
@@ -135,8 +116,96 @@ export async function getGame(db: Queryable, slug: string): Promise<GameDetail |
     releaseDate: game.release_date,
     baseGame: game.base_slug ? { slug: game.base_slug, title: game.base_title! } : null,
     sourceUrl: game.source_url,
-    listings: [...listings.values()],
+    listings,
   };
+}
+
+/** Full price history for several games, grouped by game then store (store display order, oldest first). */
+export async function loadListings(db: Queryable, gameIds: number[]): Promise<Map<number, StoreListing[]>> {
+  const points = await db.query<{
+    game_id: number;
+    store_id: string;
+    url: string | null;
+    available: boolean;
+    ts: string;
+    price_cents: number;
+    regular_cents: number;
+    cut: number;
+  }>(
+    `SELECT l.game_id, l.store_id, l.url, l.available, ${iso("p.recorded_at")} AS ts,
+            p.price_cents, p.regular_cents, p.cut
+     FROM listings l
+     JOIN stores st USING (store_id)
+     JOIN price_points p USING (listing_id)
+     WHERE l.game_id = ANY($1::int[])
+     ORDER BY l.game_id, st.sort_order, p.recorded_at`,
+    [gameIds],
+  );
+
+  const byGame = new Map<number, Map<string, StoreListing>>();
+  for (const p of points) {
+    let stores = byGame.get(p.game_id);
+    if (!stores) byGame.set(p.game_id, (stores = new Map()));
+    let listing = stores.get(p.store_id);
+    if (!listing) {
+      listing = { storeId: p.store_id, url: p.url, available: p.available, history: [] };
+      stores.set(p.store_id, listing);
+    }
+    listing.history.push({ timestamp: p.ts, priceCents: p.price_cents, regularCents: p.regular_cents, cut: p.cut });
+  }
+  return new Map([...byGame].map(([id, stores]) => [id, [...stores.values()]]));
+}
+
+/** Slugs of the given ITAD ids that we already track, keyed by ITAD id. */
+export async function trackedSlugs(db: Queryable, itadIds: string[]): Promise<Map<string, string>> {
+  if (itadIds.length === 0) return new Map();
+  const rows = await db.query<{ itad_id: string; slug: string }>(
+    "SELECT itad_id::text, slug FROM games WHERE itad_id = ANY($1::uuid[])",
+    [itadIds],
+  );
+  return new Map(rows.map((r) => [r.itad_id, r.slug]));
+}
+
+/** ITAD shop id → our store id, from the stores table. */
+export async function storeIdsByShop(db: Queryable): Promise<Map<number, string>> {
+  const rows = await db.query<{ itad_shop_id: number; store_id: string }>(
+    "SELECT itad_shop_id, store_id FROM stores WHERE itad_shop_id IS NOT NULL",
+  );
+  return new Map(rows.map((r) => [r.itad_shop_id, r.store_id]));
+}
+
+/** Games expected to go on sale within the next `days` days that aren't on sale now. */
+export async function getUpcomingSales(db: Queryable, days = 45, limit = 10): Promise<UpcomingSale[]> {
+  const rows = await db.query<
+    SummaryRow & {
+      next_sale_at: string;
+      label: string;
+      chance: number | null;
+      typical_cut: number | null;
+      expected_price_cents: number | null;
+    } & Row
+  >(
+    `SELECT ${SUMMARY_COLUMNS}, ${iso("f.next_sale_at")} AS next_sale_at, f.label, f.chance,
+            f.typical_cut, f.expected_price_cents
+     FROM game_forecasts f
+     JOIN games g USING (game_id)
+     LEFT JOIN game_stats s USING (game_id)
+     WHERE f.next_sale_at > now()
+       AND f.next_sale_at < now() + make_interval(days => $1)
+       AND (f.chance IS NULL OR f.chance >= 0.5)
+       AND COALESCE(s.best_cut, 0) < 10   -- already on sale: it's in "Biggest discounts" instead
+     ORDER BY f.next_sale_at::date, f.chance DESC NULLS LAST, f.typical_cut DESC NULLS LAST, g.title
+     LIMIT $2`,
+    [days, limit],
+  );
+  return rows.map((r) => ({
+    game: toSummary(r),
+    expectedStart: r.next_sale_at,
+    label: r.label,
+    chance: r.chance,
+    typicalCut: r.typical_cut,
+    expectedPriceCents: r.expected_price_cents,
+  }));
 }
 
 export async function getHomeSections(db: Queryable): Promise<HomeSections> {
@@ -195,8 +264,11 @@ export async function getHomeSections(db: Queryable): Promise<HomeSections> {
      LIMIT 10`,
   );
 
+  const upcomingSales = await getUpcomingSales(db);
+
   return {
     stats: { games: stats!.games, stores: stats!.stores, priceChanges: stats!.price_changes },
+    upcomingSales,
     biggestSales: biggestSales.map(toSummary),
     atHistoricalLow: atLow.map(toSummary),
     newReleases: newReleases.map(toSummary),

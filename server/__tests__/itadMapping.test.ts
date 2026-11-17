@@ -66,6 +66,10 @@ describe("mapGameInfo", () => {
   it("skips unsupported types like bundles", () => {
     expect(mapGameInfo({ ...base, type: "package" })).toBeNull();
   });
+
+  it("treats a missing type as a game", () => {
+    expect(mapGameInfo({ ...base, type: null })?.type).toBe("game");
+  });
 });
 
 describe("mapDealUrls", () => {

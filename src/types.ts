@@ -77,8 +77,30 @@ export interface PriceChange {
   previousCents: number;
 }
 
+/** A game we expect to go on sale soon (from the sale forecast). */
+export interface UpcomingSale {
+  game: GameSummary;
+  /** Expected start of the sale (ISO 8601). */
+  expectedStart: string;
+  /** What the forecast is based on, e.g. "Summer sales". */
+  label: string;
+  /** 0–1, or null when estimated from the game's general sale rhythm. */
+  chance: number | null;
+  typicalCut: number | null;
+  expectedPriceCents: number | null;
+}
+
+/** A game found at the data source that we don't track yet. */
+export interface ExternalGame {
+  itadId: string;
+  slug: string;
+  title: string;
+  type: GameType;
+}
+
 export interface HomeSections {
   stats: { games: number; stores: number; priceChanges: number };
+  upcomingSales: UpcomingSale[];
   biggestSales: GameSummary[];
   atHistoricalLow: GameSummary[];
   latestChanges: PriceChange[];
