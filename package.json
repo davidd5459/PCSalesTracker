@@ -1,31 +1,49 @@
 {
-  "name": "pcpricer",
+  "name": "pcsalestracker",
   "private": true,
   "version": "0.1.0",
   "description": "Look up any PC game and compare its price history across stores.",
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently --kill-others-on-fail -n web,api -c cyan,magenta \"vite\" \"tsx watch server/dev.ts\"",
+    "dev:web": "vite",
+    "dev:api": "tsx watch server/dev.ts",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "db:seed": "tsx scripts/seed.ts",
+    "db:seed-sample": "tsx scripts/seed-sample.ts",
+    "db:clear-sample": "tsx scripts/clear-sample.ts",
+    "itad:check": "tsx scripts/itad-check.ts"
   },
   "dependencies": {
+    "@hono/node-server": "^2.1.8",
+    "@neondatabase/serverless": "^1.2.0",
     "@tanstack/react-query": "^5.107.1",
+    "hono": "^4.13.18",
     "lucide-react": "^1.72.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-router": "^8.5.1",
-    "recharts": "^3.10.1"
+    "recharts": "^3.10.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.16",
     "@tailwindcss/vite": "^4.3.5",
+    "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.3.0",
+    "concurrently": "^10.0.7",
     "tailwindcss": "^4.3.5",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "vite": "^8.3.8"
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0"
   }
 }

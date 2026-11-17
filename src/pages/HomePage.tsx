@@ -12,7 +12,7 @@ export function HomePage() {
   const { data, isPending, isError } = useHomeSections();
 
   useEffect(() => {
-    document.title = "PCPricer · PC game price history";
+    document.title = "PCSalesTracker · PC game price history";
   }, []);
 
   return (
@@ -23,7 +23,7 @@ export function HomePage() {
             Price history for PC games, <span className="text-accent">across every major store.</span>
           </h1>
           <p className="mt-2 max-w-2xl text-muted">
-            PCPricer records every price change on {STORES.map((s) => s.name).join(", ").replace(/, ([^,]*)$/, " and $1")}, so
+            PCSalesTracker records every price change on {STORES.map((s) => s.name).join(", ").replace(/, ([^,]*)$/, " and $1")}, so
             you can see whether today's sale is actually a good deal.
           </p>
           <div className="mt-5 max-w-xl">

@@ -16,6 +16,8 @@ export interface PricePoint {
 export interface StoreListing {
   storeId: string;
   url: string | null;
+  /** False when the store no longer sells the game; its history is kept but it has no current price. */
+  available: boolean;
   history: PricePoint[];
 }
 
@@ -59,6 +61,8 @@ export interface GameDetail {
   releaseDate: string | null;
   /** For DLC: the base game it belongs to. */
   baseGame: { slug: string; title: string } | null;
+  /** This game's page at the data source (IsThereAnyDeal), for attribution. */
+  sourceUrl: string | null;
   listings: StoreListing[];
 }
 

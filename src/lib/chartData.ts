@@ -6,6 +6,8 @@ import type { StoreListing } from "../types";
  * draw all stores on a shared time axis.
  *
  * Keys: `t` (epoch ms), `<storeId>` (price cents), `<storeId>:cut` (discount %).
+ * A store that no longer sells the game has no value after its last recorded
+ * price, so its line ends there instead of running on to "now".
  */
 export type ChartRow = { t: number } & Record<string, number>;
 
@@ -32,9 +34,25 @@ export function buildChartRows(
     )
     .sort((a, b) => a.t - b.t);
 
+  // When each delisted store's line should stop.
+  const endsAt = new Map<string, number>();
+  for (const l of listings) {
+    const last = l.history.at(-1);
+    if (!l.available && last) endsAt.set(l.storeId, Date.parse(last.timestamp));
+  }
+
   const current: Record<string, number> = {};
   const rows: ChartRow[] = [];
-  const snapshot = (t: number): ChartRow => ({ ...current, t });
+  const snapshot = (t: number): ChartRow => {
+    const row: ChartRow = { ...current, t };
+    for (const [storeId, end] of endsAt) {
+      if (t > end) {
+        delete row[storeId];
+        delete row[`${storeId}:cut`];
+      }
+    }
+    return row;
+  };
 
   let i = 0;
   if (rangeStartMs !== null) {

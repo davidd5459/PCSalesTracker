@@ -6,6 +6,7 @@ import { CoverImage } from "../components/CoverImage";
 import { Panel } from "../components/Panel";
 import { PriceHistoryChart } from "../components/PriceHistoryChart";
 import { PriceLog } from "../components/PriceLog";
+import { SaleForecastPanel } from "../components/SaleForecastPanel";
 import { ShopFilter } from "../components/ShopFilter";
 import { StorePriceTable } from "../components/StorePriceTable";
 import { compareStores } from "../config/stores";
@@ -19,7 +20,7 @@ export function GamePage() {
   const { data: game, isPending, isError } = useGame(slug);
 
   useEffect(() => {
-    if (game) document.title = `${game.title} · Price history · PCPricer`;
+    if (game) document.title = `${game.title} · Price history · PCSalesTracker`;
   }, [game]);
 
   if (isPending) return <GamePageSkeleton />;
@@ -87,7 +88,9 @@ function GameView({ game }: { game: GameDetail }) {
             </div>
           )}
 
-          <Panel title="Current prices" meta={`${storeIds.length} stores`}>
+          <SaleForecastPanel listings={game.listings} />
+
+          <Panel title="Current prices" meta={storesMeta(game)}>
             <StorePriceTable listings={game.listings} />
           </Panel>
 
@@ -161,12 +164,25 @@ function GameView({ game }: { game: GameDetail }) {
               <InfoRow label="Price changes">
                 <span className="font-mono">{formatInteger(stats.changes)}</span>
               </InfoRow>
+              {game.sourceUrl && (
+                <InfoRow label="Data source">
+                  <a href={game.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+                    IsThereAnyDeal ↗
+                  </a>
+                </InfoRow>
+              )}
             </dl>
           </div>
         </aside>
       </div>
     </div>
   );
+}
+
+function storesMeta(game: GameDetail): string {
+  const selling = game.listings.filter((l) => l.available).length;
+  const total = game.listings.length;
+  return selling === total ? `${total} stores` : `${selling} of ${total} stores selling`;
 }
 
 function InfoRow({ label, children }: { label: string; children: ReactNode }) {

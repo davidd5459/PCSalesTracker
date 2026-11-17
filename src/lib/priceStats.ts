@@ -6,10 +6,11 @@ export function currentPoint(listing: StoreListing): PricePoint | null {
   return listing.history.at(-1) ?? null;
 }
 
-/** Current price at every store, cheapest first (ties follow store order). */
+/** Current price at every store that still sells the game, cheapest first (ties follow store order). */
 export function currentDeals(listings: StoreListing[]): Deal[] {
   const deals: Deal[] = [];
   for (const listing of listings) {
+    if (!listing.available) continue;
     const point = currentPoint(listing);
     if (!point) continue;
     deals.push({

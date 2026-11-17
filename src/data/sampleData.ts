@@ -22,12 +22,14 @@ interface SampleGameSpec {
   baseGameSlug?: string;
   /** Put the game on sale right now. Omit `cut` to match its all-time low. */
   saleNow?: { store: string; cut?: number };
+  /** A store that stopped selling the game on this date. */
+  delisted?: { store: string; on: string };
 }
 
 const SPECS: SampleGameSpec[] = [
   { slug: "cyberpunk-2077", title: "Cyberpunk 2077", type: "game", steamAppId: 1091500, developer: "CD PROJEKT RED", releaseDate: "2020-12-10", priceCents: 5999, stores: ["steam", "gog", "epic", "gmg"], saleNow: { store: "gog", cut: 60 } },
   { slug: "cyberpunk-2077-phantom-liberty", title: "Cyberpunk 2077: Phantom Liberty", type: "dlc", steamAppId: 2138330, developer: "CD PROJEKT RED", releaseDate: "2023-09-26", priceCents: 2999, stores: ["steam", "gog", "epic"], baseGameSlug: "cyberpunk-2077", saleNow: { store: "epic", cut: 30 } },
-  { slug: "the-witcher-3-wild-hunt", title: "The Witcher 3: Wild Hunt", type: "game", steamAppId: 292030, developer: "CD PROJEKT RED", releaseDate: "2015-05-18", priceCents: 3999, stores: ["steam", "gog", "epic", "humble", "fanatical", "gmg"] },
+  { slug: "the-witcher-3-wild-hunt", title: "The Witcher 3: Wild Hunt", type: "game", steamAppId: 292030, developer: "CD PROJEKT RED", releaseDate: "2015-05-18", priceCents: 3999, stores: ["steam", "gog", "epic", "humble", "fanatical", "gmg"], delisted: { store: "fanatical", on: "2021-04-01" } },
   { slug: "the-witcher-3-blood-and-wine", title: "The Witcher 3: Wild Hunt – Blood and Wine", type: "dlc", steamAppId: 378648, developer: "CD PROJEKT RED", releaseDate: "2016-05-31", priceCents: 1999, stores: ["steam", "gog"], baseGameSlug: "the-witcher-3-wild-hunt" },
   { slug: "hades", title: "Hades", type: "game", steamAppId: 1145360, developer: "Supergiant Games", releaseDate: "2020-09-17", priceCents: 2499, stores: ["steam", "epic", "humble", "fanatical", "gmg"], saleNow: { store: "humble" } },
   { slug: "hades-ii", title: "Hades II", type: "game", steamAppId: 1145350, developer: "Supergiant Games", releaseDate: "2025-09-25", priceCents: 2999, stores: ["steam", "epic"], saleNow: { store: "steam", cut: 15 } },
@@ -124,7 +126,10 @@ function pickCut(ageYears: number, maxCut: number, seasonal: boolean, rng: () =>
 
 // --- generation -----------------------------------------------------------------
 
-function generateListing(spec: SampleGameSpec, storeId: string, now: number): StoreListing {
+function generateListing(spec: SampleGameSpec, storeId: string, realNow: number): StoreListing {
+  const delistedAt = spec.delisted?.store === storeId ? Date.parse(spec.delisted.on) : null;
+  // A delisted store's history simply stops on the delisting date.
+  const now = delistedAt ?? realNow;
   const rng = mulberry32(hashString(`${spec.slug}:${storeId}`));
   const release = Date.parse(spec.releaseDate);
   const listingStart = Math.max(release, HISTORY_START, STORE_OPENED[storeId] ?? 0);
@@ -167,6 +172,7 @@ function generateListing(spec: SampleGameSpec, storeId: string, now: number): St
   return {
     storeId,
     url: storeId === "steam" ? `https://store.steampowered.com/app/${spec.steamAppId}` : null,
+    available: delistedAt === null,
     history,
   };
 }
@@ -208,6 +214,7 @@ function generateGame(spec: SampleGameSpec, now: number): GameDetail {
     developer: spec.developer,
     releaseDate: spec.releaseDate,
     baseGame: base ? { slug: base.slug, title: base.title } : null,
+    sourceUrl: null,
     listings,
   };
 }

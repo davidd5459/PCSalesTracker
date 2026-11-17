@@ -19,7 +19,7 @@ export function Layout() {
         <div className="mx-auto flex h-12 max-w-6xl items-center gap-4 px-4">
           <Link to="/" className="flex shrink-0 items-center gap-2 text-[15px] font-semibold tracking-tight">
             <Logo className="size-7" />
-            PCPricer
+            PCSalesTracker
           </Link>
           {USING_SAMPLE_DATA && (
             <span
@@ -44,10 +44,20 @@ export function Layout() {
       <footer className="mt-12 border-t border-line">
         <div className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-6 text-xs text-faint sm:flex-row sm:justify-between">
           <p>
-            PCPricer is an independent project, not affiliated with any store.
-            {USING_SAMPLE_DATA && " Prices currently shown are generated sample data."}
+            PCSalesTracker is an independent project, not affiliated with any store or with IsThereAnyDeal.{" "}
+            {USING_SAMPLE_DATA ? (
+              "Prices currently shown are generated sample data."
+            ) : (
+              <>
+                Price data from the{" "}
+                <a href="https://isthereanydeal.com" target="_blank" rel="noopener noreferrer" className="text-muted underline hover:text-ink">
+                  IsThereAnyDeal API
+                </a>
+                .
+              </>
+            )}
           </p>
-          <p>© {new Date().getFullYear()} PCPricer · MIT License</p>
+          <p>© {new Date().getFullYear()} PCSalesTracker · MIT License</p>
         </div>
       </footer>
     </div>

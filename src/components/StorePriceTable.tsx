@@ -1,5 +1,6 @@
 import { ExternalLink } from "lucide-react";
-import { formatCents } from "../lib/format";
+import { compareStores } from "../config/stores";
+import { formatCents, formatDate } from "../lib/format";
 import { currentDeals, listingLow } from "../lib/priceStats";
 import type { StoreListing } from "../types";
 import { DiscountBadge, StoreLabel } from "./Badges";
@@ -10,6 +11,7 @@ export function StorePriceTable({ listings }: { listings: StoreListing[] }) {
   const deals = currentDeals(listings);
   const lowest = deals[0]?.priceCents;
   const lowByStore = new Map(listings.map((l) => [l.storeId, listingLow(l)?.priceCents]));
+  const delisted = listings.filter((l) => !l.available).sort((a, b) => compareStores(a.storeId, b.storeId));
 
   return (
     <div className="overflow-x-auto">
@@ -63,6 +65,25 @@ export function StorePriceTable({ listings }: { listings: StoreListing[] }) {
                     </span>
                   )}
                 </td>
+              </tr>
+            );
+          })}
+          {delisted.map((listing) => {
+            const last = listing.history.at(-1);
+            const storeLow = lowByStore.get(listing.storeId);
+            return (
+              <tr key={listing.storeId} className="border-b border-line/60 text-faint last:border-0">
+                <td className="px-3 py-2">
+                  <StoreLabel storeId={listing.storeId} className="opacity-60" />
+                </td>
+                <td colSpan={2} className="px-3 py-2 text-right text-xs">
+                  No longer sold{last && <> · last seen {formatDate(last.timestamp)}</>}
+                </td>
+                <td className="px-3 py-2 text-right font-mono text-[13px]">
+                  {storeLow !== undefined ? formatCents(storeLow) : "—"}
+                </td>
+                <td className="px-3 py-2 text-right font-mono">—</td>
+                <td />
               </tr>
             );
           })}
