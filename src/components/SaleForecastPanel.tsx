@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { formatCents, formatDate } from "../lib/format";
 import { forecastSales, saleCalendar, type EventForecast, type VerdictKind } from "../lib/salePrediction";
 import type { StoreListing } from "../types";
-import { StoreLabel } from "./Badges";
+import { LikelihoodBadge, StoreLabel } from "./Badges";
 import { Panel, TH } from "./Panel";
 
 const VERDICT_STYLE: Record<VerdictKind, { icon: LucideIcon; tone: string }> = {
@@ -105,7 +105,7 @@ function EventTable({ events }: { events: EventForecast[] }) {
               </td>
               <td className="px-3 py-2 font-mono whitespace-nowrap">{formatDate(e.expectedStart)}</td>
               <td className="px-3 py-2">
-                <ChanceBar chance={e.chance} />
+                <LikelihoodBadge chance={e.chance} />
               </td>
               <td className="px-3 py-2 text-right font-mono">{e.typicalCut != null ? `-${e.typicalCut}%` : "—"}</td>
               <td className="px-3 py-2 text-right">
@@ -127,19 +127,6 @@ function EventTable({ events }: { events: EventForecast[] }) {
           ))}
         </tbody>
       </table>
-    </div>
-  );
-}
-
-function ChanceBar({ chance }: { chance: number }) {
-  const pct = Math.round(chance * 100);
-  const color = chance >= 0.7 ? "bg-deal" : chance >= 0.5 ? "bg-accent" : "bg-faint";
-  return (
-    <div className="flex items-center gap-2" title={`${pct}% chance of a sale`}>
-      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-surface-2">
-        <div className={`h-full ${color}`} style={{ width: `${pct}%` }} />
-      </div>
-      <span className="w-8 font-mono text-xs text-muted">{pct}%</span>
     </div>
   );
 }

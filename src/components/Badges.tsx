@@ -1,4 +1,5 @@
 import { getStore } from "../config/stores";
+import { likelihood, type Likelihood } from "../lib/salePrediction";
 import type { GameType } from "../types";
 
 export function DiscountBadge({ cut, className = "" }: { cut: number; className?: string }) {
@@ -41,6 +42,25 @@ export function StoreLabel({ storeId, className = "" }: { storeId: string; class
     <span className={`inline-flex items-center gap-1.5 ${className}`}>
       <span className="size-2 shrink-0 rounded-[2px]" style={{ backgroundColor: store.color }} aria-hidden />
       {store.name}
+    </span>
+  );
+}
+
+const LIKELIHOOD_STYLE: Record<Likelihood, { label: string; tone: string; hint: string }> = {
+  high: { label: "High", tone: "border-deal/50 text-deal", hint: "On sale during this event in most recent years" },
+  moderate: { label: "Moderate", tone: "border-accent/50 text-accent", hint: "On sale during this event in about half of recent years" },
+  low: { label: "Low", tone: "border-line text-faint", hint: "Rarely on sale during this event" },
+};
+
+/** Chance of a sale as Low / Moderate / High, from a 0–1 forecast score. */
+export function LikelihoodBadge({ chance }: { chance: number }) {
+  const style = LIKELIHOOD_STYLE[likelihood(chance)];
+  return (
+    <span
+      className={`inline-block rounded-sm border px-1.5 text-[11px] font-medium leading-4 ${style.tone}`}
+      title={style.hint}
+    >
+      {style.label}
     </span>
   );
 }

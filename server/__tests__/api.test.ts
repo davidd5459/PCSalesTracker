@@ -148,6 +148,18 @@ describe("GET /api/search", () => {
     expect(body).toEqual([]);
   });
 
+  it("is cached by the CDN but not by browsers", async () => {
+    const res = await app.request("/api/search?q=witcher");
+    expect(res.headers.get("Cache-Control")).toBe("no-cache");
+    expect(res.headers.get("CDN-Cache-Control")).toContain("s-maxage=300");
+  });
+
+  it("ignores the cache-busting parameter", async () => {
+    const { status, body } = await get<GameSummary[]>("/api/search?q=witcher&v=12345");
+    expect(status).toBe(200);
+    expect(body[0]?.slug).toBe("the-witcher-3-wild-hunt");
+  });
+
   it("rejects too-short queries", async () => {
     expect((await get("/api/search?q=a")).status).toBe(400);
   });
@@ -302,13 +314,23 @@ describe("replacing the least recently viewed game when full", () => {
     expect(await total()).toBe(before);
   });
 
+  it("also counts as full when the database reaches its storage limit", async () => {
+    await ageView("terraria", 10);
+    const before = await total();
+    // Far below the game cap, but over a (tiny) storage limit.
+    await importOnDemand(db, fakeItad, id("00a4"), { perHour: 99, maxGames: 99_999, maxBytes: 1 });
+    expect(await total()).toBe(before);
+    expect(await exists("terraria")).toBe(false);
+    expect(await exists("extra-game-00a4")).toBe(true);
+  });
+
   it("doesn't evict anything when the import itself fails", async () => {
-    await ageView("terraria", 5);
+    await ageView("extra-game-00a4", 5);
     const before = await total();
     await expect(importOnDemand(db, fakeItad, BUNDLE_ID, { perHour: 99, maxGames: before })).rejects.toMatchObject({
       status: 422,
     });
-    expect(await exists("terraria")).toBe(true);
+    expect(await exists("extra-game-00a4")).toBe(true);
     expect(await total()).toBe(before);
   });
 });

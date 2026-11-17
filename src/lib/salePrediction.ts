@@ -34,6 +34,19 @@ const SAME_SALE_DAYS = 7;
 /** An event counts as a likely sale from this chance up. */
 const LIKELY = 0.5;
 
+export type Likelihood = "low" | "moderate" | "high";
+
+/**
+ * Plain-language chance of a sale. Each event is judged on only a few years,
+ * so a precise percentage would claim more accuracy than the data has.
+ * High ≈ joined most recent years, moderate ≈ about half, low ≈ rarely.
+ */
+export function likelihood(chance: number): Likelihood {
+  if (chance >= 0.7) return "high";
+  if (chance >= LIKELY) return "moderate";
+  return "low";
+}
+
 /** A recurring store event, as a yearly window of dates (UTC). */
 export interface SaleEvent {
   id: string;
@@ -84,7 +97,7 @@ export interface EventForecast {
   event: SaleEvent;
   /** Best guess for when the next occurrence starts (epoch ms). */
   expectedStart: number;
-  /** 0–1: how likely this game is to be discounted during the next occurrence. */
+  /** 0–1 score for sorting and filtering; show it to people via likelihood(). */
   chance: number;
   hits: number;
   observed: number;

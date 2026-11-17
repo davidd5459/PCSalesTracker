@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PricePoint, StoreListing } from "../../types";
-import { forecastSales, saleCalendar, saleEpisodes } from "../salePrediction";
+import { forecastSales, likelihood, saleCalendar, saleEpisodes } from "../salePrediction";
 
 const REGULAR = 4000;
 const point = (date: string, cut: number): PricePoint => ({
@@ -90,5 +90,13 @@ describe("saleCalendar", () => {
     expect(months[5]).toBe(50);
     expect(months[6]).toBe(50); // sale ran into July
     expect(months[7]).toBe(0);
+  });
+});
+
+describe("likelihood", () => {
+  // Scores for 0-4 hits out of the last 4 years: 10%, 30%, 50%, 70%, 90%.
+  it("groups a game's track record into low, moderate and high", () => {
+    const fromHits = (hits: number) => likelihood((hits + 0.5) / 5);
+    expect([0, 1, 2, 3, 4].map(fromHits)).toEqual(["low", "low", "moderate", "high", "high"]);
   });
 });

@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from "react";
 import { useHomeSections } from "../api/queries";
-import { AtlBadge, DiscountBadge, StoreLabel } from "../components/Badges";
+import { AtlBadge, DiscountBadge, LikelihoodBadge, StoreLabel } from "../components/Badges";
 import { GameCell } from "../components/GameCell";
 import { Panel, TH } from "../components/Panel";
 import { SearchBar } from "../components/SearchBar";
@@ -150,7 +150,7 @@ function UpcomingTable({ sales }: { sales: UpcomingSale[] }) {
           <tr className="border-b border-line">
             <th className={TH}>Game</th>
             <th className={`${TH} w-36`}>Expected</th>
-            <th className={`${TH} w-20 text-right`}>Chance</th>
+            <th className={`${TH} w-24 text-right`}>Chance</th>
             <th className={`${TH} w-20 text-right`}>Typical</th>
             <th className={`${TH} w-28 text-right`}>Est. price</th>
           </tr>
@@ -167,8 +167,8 @@ function UpcomingTable({ sales }: { sales: UpcomingSale[] }) {
                   <div>{formatDate(s.expectedStart)}</div>
                   <div className="text-[11px] text-faint">in {days} day{days === 1 ? "" : "s"}</div>
                 </td>
-                <td className="px-3 py-1.5 text-right font-mono text-[13px] text-muted">
-                  {s.chance !== null ? `${Math.round(s.chance * 100)}%` : "—"}
+                <td className="px-3 py-1.5 text-right">
+                  {s.chance !== null ? <LikelihoodBadge chance={s.chance} /> : <span className="text-faint">—</span>}
                 </td>
                 <td className="px-3 py-1.5 text-right">
                   {s.typicalCut !== null ? <DiscountBadge cut={s.typicalCut} /> : "—"}

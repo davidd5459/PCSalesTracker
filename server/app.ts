@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { z } from "zod";
 import type { ExternalGame } from "../src/types.js";
 import { ConfigError, type Db, type Queryable } from "./db/client.js";
@@ -8,8 +8,16 @@ import { ImportRefused, importOnDemand } from "./ingest/importOnDemand.js";
 import { ItadError, type ItadClient } from "./itad/client.js";
 import { mapGameType } from "./itad/mapping.js";
 
-/** CDN caching: serve from Vercel's edge for 5 min, then refresh in the background. */
-const CACHE_PUBLIC = "public, s-maxage=300, stale-while-revalidate=3600";
+/**
+ * Cache responses at Vercel's CDN for 5 minutes (then refresh in the background),
+ * but not in browsers. Browsers honor stale-while-revalidate too, so a browser
+ * copy would keep showing pre-import results after a game is added; the app's
+ * own query cache handles quick repeat requests instead.
+ */
+function cacheAtCdn(c: Context) {
+  c.header("Cache-Control", "no-cache");
+  c.header("CDN-Cache-Control", "public, s-maxage=300, stale-while-revalidate=3600");
+}
 
 const SearchParams = z.object({
   q: z.string().trim().min(2).max(100),
@@ -63,7 +71,7 @@ export function createApp({ getDb, withWriteDb, getItad }: AppDeps) {
     const parsed = SearchParams.safeParse({ q: c.req.query("q"), limit: c.req.query("limit") });
     if (!parsed.success) return c.json({ error: "Query must be 2-100 characters" }, 400);
     const results = await searchGames(getDb(), parsed.data.q, parsed.data.limit);
-    c.header("Cache-Control", CACHE_PUBLIC);
+    cacheAtCdn(c);
     return c.json(results);
   });
 
@@ -82,7 +90,7 @@ export function createApp({ getDb, withWriteDb, getItad }: AppDeps) {
       candidates.map((g) => g.itadId),
     );
     const results = candidates.filter((g) => !tracked.has(g.itadId)).slice(0, parsed.data.limit);
-    c.header("Cache-Control", CACHE_PUBLIC);
+    cacheAtCdn(c);
     return c.json(results);
   });
 
@@ -104,13 +112,13 @@ export function createApp({ getDb, withWriteDb, getItad }: AppDeps) {
     // Keeps popular pages from being evicted. A failed write shouldn't break the page.
     // (Views served from the CDN cache don't reach here; "roughly when" is all eviction needs.)
     await recordView(getDb(), slug).catch((err) => console.error("recordView failed:", err));
-    c.header("Cache-Control", CACHE_PUBLIC);
+    cacheAtCdn(c);
     return c.json(game);
   });
 
   app.get("/home", async (c) => {
     const sections = await getHomeSections(getDb());
-    c.header("Cache-Control", CACHE_PUBLIC);
+    cacheAtCdn(c);
     return c.json(sections);
   });
 

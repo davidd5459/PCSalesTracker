@@ -16,11 +16,19 @@ import type { ItadClient } from "../itad/client.js";
 import { refreshForecasts } from "./forecasts.js";
 import { importGame } from "./importGame.js";
 
-export const IMPORT_LIMITS = {
+export interface ImportLimits {
   /** New games per rolling hour, across all visitors. */
+  perHour: number;
+  /** Replace games beyond this many. ~100 KB each (history, indexes, forecasts) ≈ 300 MB. */
+  maxGames: number;
+  /** Also replace games once the database is this big, whatever the count (Neon's free tier is 0.5 GB). */
+  maxBytes: number;
+}
+
+export const IMPORT_LIMITS: ImportLimits = {
   perHour: 60,
-  /** Size cap; roughly 70% of Neon's free 0.5 GB at ~65 KB per game. */
-  maxGames: 5000,
+  maxGames: 3000,
+  maxBytes: 400 * 1024 * 1024,
 };
 
 /** The import was refused; `status` is the HTTP status to answer with. */
@@ -38,18 +46,21 @@ export async function importOnDemand(
   db: Db,
   itad: ItadClient,
   itadId: string,
-  limits = IMPORT_LIMITS,
+  overrides: Partial<ImportLimits> = {},
 ): Promise<string> {
+  const limits = { ...IMPORT_LIMITS, ...overrides };
   const existing = (await trackedSlugs(db, [itadId])).get(itadId);
   if (existing) return existing;
 
-  const [counts] = await db.query<{ total: number; recent: number; evictable: number }>(
+  const [counts] = await db.query<{ total: number; recent: number; evictable: number; bytes: string }>(
     `SELECT count(*)::int AS total,
             count(*) FILTER (WHERE created_at > now() - interval '1 hour')::int AS recent,
-            count(*) FILTER (WHERE NOT protected)::int AS evictable
+            count(*) FILTER (WHERE NOT protected)::int AS evictable,
+            pg_database_size(current_database())::text AS bytes
      FROM games`,
   );
-  const full = counts!.total >= limits.maxGames;
+  // Full by count (the planned budget) or by actual storage (the real limit).
+  const full = counts!.total >= limits.maxGames || Number(counts!.bytes) >= limits.maxBytes;
   if (full && counts!.evictable === 0) {
     throw new ImportRefused("The catalog is full, so new games can't be added right now.", 503);
   }

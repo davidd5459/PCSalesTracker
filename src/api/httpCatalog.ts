@@ -22,10 +22,22 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 const getJson = <T>(path: string) => request<T>(path);
 
+/**
+ * Set when this visitor adds a game. Search requests then carry it as a
+ * parameter, so they skip CDN-cached results from before the game existed.
+ */
+let catalogChangedAt = 0;
+
+function searchParams(query: string, limit: number) {
+  const params = new URLSearchParams({ q: query, limit: String(limit) });
+  if (catalogChangedAt) params.set("v", String(catalogChangedAt));
+  return params;
+}
+
 /** Talks to the backend API (server/app.ts). */
 export const httpCatalog: CatalogApi = {
   search(query, limit = 8) {
-    const params = new URLSearchParams({ q: query, limit: String(limit) });
+    const params = searchParams(query, limit);
     return getJson<GameSummary[]>(`/api/search?${params}`);
   },
 
@@ -43,7 +55,7 @@ export const httpCatalog: CatalogApi = {
   },
 
   searchExternal(query, limit = 6) {
-    const params = new URLSearchParams({ q: query, limit: String(limit) });
+    const params = searchParams(query, limit);
     return getJson<ExternalGame[]>(`/api/search/external?${params}`);
   },
 
@@ -53,6 +65,7 @@ export const httpCatalog: CatalogApi = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ itadId }),
     });
+    catalogChangedAt = Date.now();
     return slug;
   },
 };
