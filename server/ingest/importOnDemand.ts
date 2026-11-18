@@ -19,7 +19,11 @@ import { importGame } from "./importGame.js";
 export interface ImportLimits {
   /** New games per rolling hour, across all visitors. */
   perHour: number;
-  /** Replace games beyond this many. ~100 KB each (history, indexes, forecasts) ≈ 300 MB. */
+  /**
+   * Replace games beyond this many. Measured ~67 KB per popular game (history,
+   * indexes, forecasts), so 4,000 ≈ 270 MB plus ~8 MB of fixed Postgres overhead:
+   * room for ~3,000 protected popular games and ~1,000 rotating searched-for ones.
+   */
   maxGames: number;
   /** Also replace games once the database is this big, whatever the count (Neon's free tier is 0.5 GB). */
   maxBytes: number;
@@ -27,7 +31,7 @@ export interface ImportLimits {
 
 export const IMPORT_LIMITS: ImportLimits = {
   perHour: 60,
-  maxGames: 3000,
+  maxGames: 4000,
   maxBytes: 400 * 1024 * 1024,
 };
 
