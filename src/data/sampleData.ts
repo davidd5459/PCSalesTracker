@@ -6,7 +6,7 @@
  * seasonal sales, occasional publisher sales, discounts that deepen as a game
  * ages, and occasional permanent price cuts. Replaced by real data in chunk 2.
  */
-import type { GameDetail, GameType, PricePoint, StoreListing } from "../types";
+import type { GameDetail, GameType, PricePoint, StoreListing } from "../types.js";
 
 interface SampleGameSpec {
   slug: string;

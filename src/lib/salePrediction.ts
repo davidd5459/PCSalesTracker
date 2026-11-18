@@ -17,10 +17,10 @@
  * Everything is computed from the history already on the page, so it works the
  * same with sample data and live data.
  */
-import { formatCents, formatDate } from "./format";
-import { currentDeals, historicalLow } from "./priceStats";
-import type { StoreListing } from "../types";
-import { getStore } from "../config/stores";
+import { formatCents, formatDate } from "./format.js";
+import { currentDeals, historicalLow } from "./priceStats.js";
+import type { StoreListing } from "../types.js";
+import { getStore } from "../config/stores.js";
 
 const DAY = 86_400_000;
 const YEAR = 365.25 * DAY;

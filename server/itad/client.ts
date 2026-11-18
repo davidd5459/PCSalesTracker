@@ -22,6 +22,11 @@ const COUNTRY = "US";
 const MIN_INTERVAL_MS = 350;
 const MAX_RETRIES = 3;
 
+/** ITAD accepts timestamps to the second: "2026-11-09T07:00:00Z", not "…07:00:00.000Z". */
+export function toItadTime(iso: string): string {
+  return new Date(iso).toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
 export class ItadError extends Error {
   constructor(
     message: string,
@@ -63,7 +68,7 @@ export class ItadClient {
   /** Full price change log for one game, filtered to the given shops. */
   history(id: string, opts: { shops: number[]; since?: string }) {
     return this.request(HistoryResponse, "/games/history/v2", {
-      params: { id, country: COUNTRY, shops: opts.shops.join(","), since: opts.since },
+      params: { id, country: COUNTRY, shops: opts.shops.join(","), since: opts.since && toItadTime(opts.since) },
     });
   }
 

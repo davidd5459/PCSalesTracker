@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { collapseUnchanged } from "../db/writes.js";
+import { toItadTime } from "../itad/client.js";
 import { mapDealUrls, mapGameInfo, mapHistory } from "../itad/mapping.js";
 import type { HistoryEntry } from "../itad/schemas.js";
 
@@ -88,5 +89,12 @@ describe("collapseUnchanged", () => {
     const p = (priceCents: number, t: string) => ({ timestamp: t, priceCents, regularCents: 2999, cut: 0 });
     const out = collapseUnchanged([p(2999, "a"), p(1499, "b"), p(1499, "c")], { priceCents: 2999, regularCents: 2999, cut: 0 });
     expect(out.map((x) => x.timestamp)).toEqual(["b"]);
+  });
+});
+
+describe("toItadTime", () => {
+  it("drops milliseconds, which the API rejects", () => {
+    expect(toItadTime("2026-11-09T07:00:00.123Z")).toBe("2026-11-09T07:00:00Z");
+    expect(toItadTime("2015-01-01T00:00:00Z")).toBe("2015-01-01T00:00:00Z");
   });
 });

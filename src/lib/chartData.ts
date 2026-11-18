@@ -1,4 +1,4 @@
-import type { StoreListing } from "../types";
+import type { StoreListing } from "../types.js";
 
 /**
  * One row per moment a price changed at any store. Each row carries every

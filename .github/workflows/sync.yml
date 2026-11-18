@@ -1,0 +1,32 @@
+name: Daily price sync
+
+# Brings every tracked game's prices up to date and recomputes sale forecasts.
+# Needs two repository secrets: DATABASE_URL and ITAD_API_KEY.
+on:
+  schedule:
+    # 18:30 UTC every day: shortly after Steam's sales start (10am Pacific).
+    - cron: "30 18 * * *"
+  workflow_dispatch: # adds a "Run workflow" button for running it by hand
+
+# Never run two syncs at once.
+concurrency:
+  group: price-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      ITAD_API_KEY: ${{ secrets.ITAD_API_KEY }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # Apply any new database migrations before syncing.
+      - run: npm run db:migrate
+      - run: npm run db:sync

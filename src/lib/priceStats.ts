@@ -1,5 +1,5 @@
-import { compareStores } from "../config/stores";
-import type { Deal, GameDetail, GameSummary, HistoricalLow, PricePoint, StoreListing } from "../types";
+import { compareStores } from "../config/stores.js";
+import type { Deal, GameDetail, GameSummary, HistoricalLow, PricePoint, StoreListing } from "../types.js";
 
 /** The latest price point for a listing, or null if it has no history. */
 export function currentPoint(listing: StoreListing): PricePoint | null {

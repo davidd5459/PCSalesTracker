@@ -1,0 +1,13 @@
+{
+  // Checks the API and scripts the way Node runs them in production (Vercel,
+  // GitHub Actions): native ES modules, where relative imports need file extensions.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "types": ["node"]
+  },
+  "include": ["api", "server", "scripts"],
+  "exclude": ["server/**/__tests__", "server/test"]
+}
