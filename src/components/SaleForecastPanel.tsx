@@ -94,16 +94,16 @@ function EventTable({ events }: { events: EventForecast[] }) {
   );
 }
 
+/** One square per recent year, oldest first: filled if the game was on sale that season, empty if not. */
 function TrackRecord({ record, hits }: { record: EventForecast["record"]; hits: number }) {
+  const summary = record.map((r) => `${r.year}: ${r.cut === null ? "no sale" : "on sale"}`).join(", ");
   return (
     <div className="flex items-center gap-2">
-      <div className="flex gap-0.5">
+      <div className="flex gap-0.5" role="img" aria-label={summary}>
         {record.map((r) => (
           <span
             key={r.year}
-            className={`size-2.5 rounded-[2px] ${r.cut === null ? "border border-line" : ""}`}
-            style={r.cut === null ? undefined : { backgroundColor: heat(r.cut) }}
-            title={r.cut === null ? `${r.year}: no sale` : `${r.year}: up to ${r.cut}% off`}
+            className={`size-2.5 rounded-[2px] ${r.cut === null ? "border border-line" : "bg-deal"}`}
           />
         ))}
       </div>
