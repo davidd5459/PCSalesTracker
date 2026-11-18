@@ -1,12 +1,11 @@
 import { useEffect, type ReactNode } from "react";
 import { useHomeSections } from "../api/queries";
-import { AtlBadge, DiscountBadge, LikelihoodBadge, StoreLabel } from "../components/Badges";
+import { DiscountBadge, LikelihoodBadge, StoreLabel } from "../components/Badges";
 import { GameCell } from "../components/GameCell";
 import { Panel, TH } from "../components/Panel";
 import { SearchBar } from "../components/SearchBar";
-import { STORES } from "../config/stores";
-import { formatCents, formatDate, formatInteger, formatRelative } from "../lib/format";
-import type { GameSummary, PriceChange, UpcomingSale } from "../types";
+import { daysUntil, formatCents, formatDate, formatDaysUntil, formatInteger } from "../lib/format";
+import type { GameSummary, HomeSections, UpcomingSale } from "../types";
 
 export function HomePage() {
   const { data, isPending, isError } = useHomeSections();
@@ -16,60 +15,65 @@ export function HomePage() {
   }, []);
 
   return (
-    <>
-      <section className="border-b border-line">
-        <div className="mx-auto max-w-6xl px-4 py-9">
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-[28px]">
-            Price history for PC games, <span className="text-accent">across every major store.</span>
-          </h1>
-          <p className="mt-2 max-w-2xl text-muted">
-            PCSalesTracker records every price change on {STORES.map((s) => s.name).join(", ").replace(/, ([^,]*)$/, " and $1")}, so
-            you can see whether today's sale is actually a good deal.
-          </p>
-          <div className="mt-5 max-w-xl">
-            <SearchBar size="lg" autoFocus />
-          </div>
-          {data && (
-            <p className="mt-3 font-mono text-xs text-faint">
-              {formatInteger(data.stats.games)} games · {data.stats.stores} stores ·{" "}
-              {formatInteger(data.stats.priceChanges)} price changes recorded
-            </p>
-          )}
-        </div>
-      </section>
+    <div className="mx-auto max-w-[1400px] space-y-5 px-4 pt-6">
+      <div className="max-w-2xl">
+        <h1 className="mb-2 text-lg font-semibold">Look up a PC game</h1>
+        <SearchBar size="lg" autoFocus />
+      </div>
 
-      <div className="mx-auto grid max-w-6xl grid-cols-1 gap-4 px-4 pt-6 lg:grid-cols-2">
-        <Panel title="Sales expected soon" meta="Forecast from each game's sale history" className="lg:col-span-2">
-          <Body loading={isPending} error={isError} empty={data?.upcomingSales.length === 0}>
-            <UpcomingTable sales={data?.upcomingSales ?? []} />
-          </Body>
-        </Panel>
+      {data && <NextSaleBanner data={data} />}
 
-        <Panel title="Biggest discounts" meta="Deepest cuts right now">
+      <Panel title="Sales expected soon">
+        <Body loading={isPending} error={isError} empty={data?.upcomingSales.length === 0}>
+          <UpcomingTable sales={data?.upcomingSales ?? []} />
+        </Body>
+      </Panel>
+
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <Panel title="Biggest discounts">
           <Body loading={isPending} error={isError} empty={data?.biggestSales.length === 0}>
             <DealTable games={data?.biggestSales ?? []} />
           </Body>
         </Panel>
 
-        <Panel title="At all-time low" meta="Cheapest they have ever been">
+        <Panel title="At their lowest price ever">
           <Body loading={isPending} error={isError} empty={data?.atHistoricalLow.length === 0}>
-            <DealTable games={data?.atHistoricalLow ?? []} showAtl />
-          </Body>
-        </Panel>
-
-        <Panel title="Latest price changes" meta="Across all tracked stores">
-          <Body loading={isPending} error={isError} empty={data?.latestChanges.length === 0}>
-            <ChangesTable changes={data?.latestChanges ?? []} />
-          </Body>
-        </Panel>
-
-        <Panel title="Recent releases" meta="Newest tracked games">
-          <Body loading={isPending} error={isError} empty={data?.newReleases.length === 0}>
-            <ReleasesTable games={data?.newReleases ?? []} />
+            <DealTable games={data?.atHistoricalLow ?? []} />
           </Body>
         </Panel>
       </div>
-    </>
+    </div>
+  );
+}
+
+/** The next sale season most games are expected to join, and how far away it is. */
+function NextSaleBanner({ data }: { data: HomeSections }) {
+  const sale = data.nextMajorSale;
+  const onSale = data.stats.onSale > 0 && (
+    <p className="text-sm text-muted">
+      Right now, {formatInteger(data.stats.onSale)} of the {formatInteger(data.stats.games)} games we track are on sale.
+    </p>
+  );
+  if (!sale) return onSale ? <div className="rounded border border-line bg-surface px-4 py-3">{onSale}</div> : null;
+
+  const days = daysUntil(sale.expectedStart);
+  return (
+    <section className="flex flex-col gap-4 rounded border border-l-4 border-line border-l-atl bg-surface px-5 py-4 sm:flex-row sm:items-center">
+      <div className="shrink-0 text-center sm:w-28">
+        <div className="text-4xl font-bold leading-none text-atl">{days}</div>
+        <div className="mt-1 text-sm text-muted">{days === 1 ? "day" : "days"} to go</div>
+      </div>
+      <div className="space-y-1">
+        <h2 className="text-xl font-semibold">
+          Next big sale: {sale.label}, around {formatDate(sale.expectedStart)}
+        </h2>
+        <p className="text-[15px]">
+          {formatInteger(sale.games)} games we track are likely to be discounted
+          {sale.typicalCut !== null && <>, usually by about {sale.typicalCut}%</>}.
+        </p>
+        {onSale}
+      </div>
+    </section>
   );
 }
 
@@ -96,14 +100,61 @@ function Body({
       </div>
     );
   }
-  if (error) return <p className="px-3 py-4 text-[13px] text-rise">Couldn't load this section.</p>;
-  if (empty) return <p className="px-3 py-4 text-[13px] text-muted">Nothing here right now.</p>;
+  if (error) return <p className="px-3 py-4 text-sm text-rise">Couldn't load this section.</p>;
+  if (empty) return <p className="px-3 py-4 text-sm text-muted">Nothing here right now.</p>;
   return <>{children}</>;
 }
 
 const ROW = "relative border-b border-line/60 last:border-0 hover:bg-surface-2/60";
 
-function DealTable({ games, showAtl = false }: { games: GameSummary[]; showAtl?: boolean }) {
+function UpcomingTable({ sales }: { sales: UpcomingSale[] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[720px]">
+        <thead>
+          <tr className="border-b border-line">
+            <th className={TH}>Game</th>
+            <th className={TH}>Sale</th>
+            <th className={TH}>Expected</th>
+            <th className={TH}>Chance</th>
+            <th className={`${TH} text-right`}>Usually</th>
+            <th className={`${TH} text-right`}>Price then</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sales.map((s) => (
+            <tr key={s.game.slug} className={ROW}>
+              <td className="px-3 py-1.5">
+                <GameCell {...s.game} />
+              </td>
+              <td className="px-3 py-1.5 text-sm">{s.label}</td>
+              <td className="whitespace-nowrap px-3 py-1.5 text-sm">
+                {formatDate(s.expectedStart)}
+                <span className="ml-1.5 text-muted">({formatDaysUntil(s.expectedStart)})</span>
+              </td>
+              <td className="px-3 py-1.5">
+                {s.chance !== null ? <LikelihoodBadge chance={s.chance} /> : <span className="text-faint">—</span>}
+              </td>
+              <td className="px-3 py-1.5 text-right">
+                {s.typicalCut !== null ? <DiscountBadge cut={s.typicalCut} /> : "—"}
+              </td>
+              <td className="whitespace-nowrap px-3 py-1.5 text-right">
+                {s.game.bestDeal && (
+                  <span className="mr-2 text-sm text-faint line-through">{formatCents(s.game.bestDeal.priceCents)}</span>
+                )}
+                <span className="font-semibold text-deal">
+                  {s.expectedPriceCents !== null ? `~${formatCents(s.expectedPriceCents)}` : "—"}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function DealTable({ games }: { games: GameSummary[] }) {
   return (
     <table className="w-full table-fixed">
       <thead>
@@ -117,144 +168,14 @@ function DealTable({ games, showAtl = false }: { games: GameSummary[]; showAtl?:
         {games.map((g) => (
           <tr key={g.slug} className={ROW}>
             <td className="px-3 py-1.5">
-              <GameCell
-                {...g}
-                sub={
-                  <>
-                    <StoreLabel storeId={g.bestDeal!.storeId} />
-                    {showAtl && <AtlBadge short />}
-                  </>
-                }
-              />
+              <GameCell {...g} sub={<StoreLabel storeId={g.bestDeal!.storeId} />} />
             </td>
             <td className="px-3 py-1.5 text-right">
               <DiscountBadge cut={g.bestDeal!.cut} />
             </td>
-            <td className="px-3 py-1.5 text-right font-mono">
-              <div className="text-[11px] text-faint line-through">{formatCents(g.bestDeal!.regularCents)}</div>
+            <td className="px-3 py-1.5 text-right">
+              <div className="text-xs text-faint line-through">{formatCents(g.bestDeal!.regularCents)}</div>
               <div className="font-semibold">{formatCents(g.bestDeal!.priceCents)}</div>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
-
-function UpcomingTable({ sales }: { sales: UpcomingSale[] }) {
-  const now = Date.now();
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[560px] table-fixed">
-        <thead>
-          <tr className="border-b border-line">
-            <th className={TH}>Game</th>
-            <th className={`${TH} w-36`}>Expected</th>
-            <th className={`${TH} w-24 text-right`}>Chance</th>
-            <th className={`${TH} w-20 text-right`}>Typical</th>
-            <th className={`${TH} w-28 text-right`}>Est. price</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sales.map((s) => {
-            const days = Math.max(1, Math.round((Date.parse(s.expectedStart) - now) / 86_400_000));
-            return (
-              <tr key={s.game.slug} className={ROW}>
-                <td className="px-3 py-1.5">
-                  <GameCell {...s.game} sub={<span className="truncate">{s.label}</span>} />
-                </td>
-                <td className="px-3 py-1.5 font-mono text-[13px]">
-                  <div>{formatDate(s.expectedStart)}</div>
-                  <div className="text-[11px] text-faint">in {days} day{days === 1 ? "" : "s"}</div>
-                </td>
-                <td className="px-3 py-1.5 text-right">
-                  {s.chance !== null ? <LikelihoodBadge chance={s.chance} /> : <span className="text-faint">—</span>}
-                </td>
-                <td className="px-3 py-1.5 text-right">
-                  {s.typicalCut !== null ? <DiscountBadge cut={s.typicalCut} /> : "—"}
-                </td>
-                <td className="px-3 py-1.5 text-right font-mono">
-                  {s.game.bestDeal && (
-                    <div className="text-[11px] text-faint line-through">{formatCents(s.game.bestDeal.priceCents)}</div>
-                  )}
-                  <div className="font-semibold text-deal">
-                    {s.expectedPriceCents !== null ? `~${formatCents(s.expectedPriceCents)}` : "—"}
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function ChangesTable({ changes }: { changes: PriceChange[] }) {
-  return (
-    <table className="w-full table-fixed">
-      <thead>
-        <tr className="border-b border-line">
-          <th className={TH}>Game</th>
-          <th className={`${TH} w-40 text-right`}>Change</th>
-        </tr>
-      </thead>
-      <tbody>
-        {changes.map((c) => {
-          const dropped = c.priceCents < c.previousCents;
-          return (
-            <tr key={`${c.game.slug}-${c.storeId}-${c.timestamp}`} className={ROW}>
-              <td className="px-3 py-1.5">
-                <GameCell
-                  {...c.game}
-                  sub={
-                    <>
-                      <StoreLabel storeId={c.storeId} />
-                      <span className="text-faint">{formatRelative(c.timestamp)}</span>
-                    </>
-                  }
-                />
-              </td>
-              <td className="px-3 py-1.5 text-right font-mono text-[13px]">
-                <span className="text-faint">{formatCents(c.previousCents)} → </span>
-                <span className={`font-semibold ${dropped ? "text-deal" : "text-rise"}`}>{formatCents(c.priceCents)}</span>
-              </td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
-  );
-}
-
-function ReleasesTable({ games }: { games: GameSummary[] }) {
-  return (
-    <table className="w-full table-fixed">
-      <thead>
-        <tr className="border-b border-line">
-          <th className={TH}>Game</th>
-          <th className={`${TH} w-32 text-right`}>Released</th>
-          <th className={`${TH} w-24 text-right`}>Price</th>
-        </tr>
-      </thead>
-      <tbody>
-        {games.map((g) => (
-          <tr key={g.slug} className={ROW}>
-            <td className="px-3 py-1.5">
-              <GameCell {...g} />
-            </td>
-            <td className="px-3 py-1.5 text-right font-mono text-[13px] text-muted">
-              {g.releaseDate ? formatDate(g.releaseDate) : "—"}
-            </td>
-            <td className="px-3 py-1.5 text-right font-mono">
-              {g.bestDeal ? (
-                <span className="flex items-center justify-end gap-1.5">
-                  <DiscountBadge cut={g.bestDeal.cut} />
-                  <span className="font-semibold">{formatCents(g.bestDeal.priceCents)}</span>
-                </span>
-              ) : (
-                "—"
-              )}
             </td>
           </tr>
         ))}

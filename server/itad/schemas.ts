@@ -33,7 +33,8 @@ export const GameInfoResponse = z.object({
   mature: z.boolean().optional(),
   appid: z.number().int().nullish(),
   releaseDate: z.string().nullish(),
-  assets: z.record(z.string(), z.string()).nullish(),
+  // Usually { banner600: url, ... }, but an empty list when a game has no images.
+  assets: z.union([z.record(z.string(), z.string()), z.array(z.unknown())]).nullish(),
   developers: z.array(z.object({ name: z.string() })).nullish(),
   urls: z.object({ game: z.string().optional() }).nullish(),
 });
@@ -62,13 +63,14 @@ export const PricesResponse = z.array(
   }),
 );
 
+/** Shared by the ranked lists (most popular, most waitlisted, most collected). */
 export const PopularResponse = z.array(
   z.object({
     position: z.number(),
     id: z.string(),
     slug: z.string(),
     title: z.string(),
-    type: z.string().nullable(),
+    type: z.string().nullish(),
   }),
 );
 

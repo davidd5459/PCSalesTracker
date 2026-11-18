@@ -17,7 +17,7 @@ export function mapGameType(itadType: string | null): GameType | null {
 export function mapGameInfo(info: GameInfo): GameRecord | null {
   const type = mapGameType(info.type);
   if (!type) return null;
-  const assets = info.assets ?? {};
+  const assets = info.assets && !Array.isArray(info.assets) ? info.assets : {};
   const releaseDate = info.releaseDate && /^\d{4}-\d{2}-\d{2}/.test(info.releaseDate) ? info.releaseDate.slice(0, 10) : null;
   return {
     itadId: info.id,

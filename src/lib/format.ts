@@ -51,3 +51,16 @@ export function formatRelative(value: string | number, now = Date.now()): string
   if (days < 730) return `${Math.floor(days / 30)} months ago`;
   return `${Math.floor(days / 365)} years ago`;
 }
+
+/** Whole days from `now` until `value` (0 = today; never negative). */
+export function daysUntil(value: string | number, now = Date.now()): number {
+  return Math.max(0, Math.ceil((toMs(value) - now) / DAY));
+}
+
+/** "today", "tomorrow", "in 12 days" */
+export function formatDaysUntil(value: string | number, now = Date.now()): string {
+  const days = daysUntil(value, now);
+  if (days === 0) return "today";
+  if (days === 1) return "tomorrow";
+  return `in ${days} days`;
+}

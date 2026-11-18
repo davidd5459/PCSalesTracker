@@ -16,14 +16,14 @@ export function Layout() {
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-20 border-b border-line bg-surface/95 backdrop-blur">
-        <div className="mx-auto flex h-12 max-w-6xl items-center gap-4 px-4">
-          <Link to="/" className="flex shrink-0 items-center gap-2 text-[15px] font-semibold tracking-tight">
+        <div className="mx-auto flex h-12 max-w-[1400px] items-center gap-4 px-4">
+          <Link to="/" className="flex shrink-0 items-center gap-2 text-[15px] font-semibold">
             <Logo className="size-7" />
             PCSalesTracker
           </Link>
           {USING_SAMPLE_DATA && (
             <span
-              className="hidden rounded-sm border border-atl/40 px-1.5 font-mono text-[10px] uppercase leading-4 text-atl sm:inline"
+              className="hidden rounded-sm border border-atl/40 px-1.5 text-xs leading-4 text-atl sm:inline"
               title="Prices are generated sample data until the live data source is connected"
             >
               Sample data
@@ -42,23 +42,20 @@ export function Layout() {
       </main>
 
       <footer className="mt-12 border-t border-line">
-        <div className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-6 text-xs text-faint sm:flex-row sm:justify-between">
-          <p>
-            PCSalesTracker is an independent project, not affiliated with any store or with IsThereAnyDeal.{" "}
-            {USING_SAMPLE_DATA ? (
-              "Prices currently shown are generated sample data."
-            ) : (
-              <>
-                Price data from the{" "}
-                <a href="https://isthereanydeal.com" target="_blank" rel="noopener noreferrer" className="text-muted underline hover:text-ink">
-                  IsThereAnyDeal API
-                </a>
-                .
-              </>
-            )}
-          </p>
-          <p>© {new Date().getFullYear()} PCSalesTracker · MIT License</p>
-        </div>
+        <p className="mx-auto max-w-[1400px] px-4 py-6 text-sm text-faint">
+          {USING_SAMPLE_DATA ? (
+            "Showing generated sample prices."
+          ) : (
+            <>
+              Price data from{" "}
+              <a href="https://isthereanydeal.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-ink">
+                IsThereAnyDeal
+              </a>
+              .
+            </>
+          )}{" "}
+          Not affiliated with any store.
+        </p>
       </footer>
     </div>
   );

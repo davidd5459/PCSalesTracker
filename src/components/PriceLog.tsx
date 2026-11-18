@@ -14,7 +14,7 @@ export function PriceLog({ listings, hidden }: { listings: StoreListing[]; hidde
   const entries = useMemo(() => priceLog(listings).filter((e) => !hidden.has(e.storeId)), [listings, hidden]);
   const shown = entries.slice(0, limit);
 
-  if (entries.length === 0) return <p className="px-3 py-4 text-[13px] text-muted">No price changes to show.</p>;
+  if (entries.length === 0) return <p className="px-3 py-4 text-sm text-muted">No price changes to show.</p>;
 
   return (
     <>
@@ -30,7 +30,7 @@ export function PriceLog({ listings, hidden }: { listings: StoreListing[]; hidde
               <th className={`${TH} text-right`}>Price</th>
             </tr>
           </thead>
-          <tbody className="font-mono text-[13px]">
+          <tbody className="text-sm">
             {shown.map((e) => {
               const delta = e.previous ? e.priceCents - e.previous.priceCents : 0;
               const heldDays = e.previous
@@ -39,11 +39,11 @@ export function PriceLog({ listings, hidden }: { listings: StoreListing[]; hidde
               return (
                 <tr key={`${e.storeId}-${e.timestamp}`} className="border-b border-line/60 last:border-0 hover:bg-surface-2/60">
                   <td className="whitespace-nowrap px-3 py-1.5 text-muted">{formatDate(e.timestamp)}</td>
-                  <td className="whitespace-nowrap px-3 py-1.5 font-sans">
+                  <td className="whitespace-nowrap px-3 py-1.5">
                     <StoreLabel storeId={e.storeId} />
                   </td>
                   <td className="px-3 py-1.5 text-faint" title="How long the previous price lasted">
-                    {heldDays === null ? <span className="font-sans">First seen</span> : `${heldDays}d`}
+                    {heldDays === null ? <span className="">First seen</span> : `${heldDays}d`}
                   </td>
                   <td className="whitespace-nowrap px-3 py-1.5 text-right">
                     {e.previous && <span className="text-faint">{e.previous.cut}% → </span>}
@@ -69,7 +69,7 @@ export function PriceLog({ listings, hidden }: { listings: StoreListing[]; hidde
         <button
           type="button"
           onClick={() => setLimit((n) => n + PAGE_SIZE * 2)}
-          className="w-full border-t border-line py-2 text-[13px] text-accent hover:bg-surface-2"
+          className="w-full border-t border-line py-2 text-sm text-accent hover:bg-surface-2"
         >
           Show more ({entries.length - limit} remaining)
         </button>

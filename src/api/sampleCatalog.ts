@@ -1,7 +1,7 @@
 /** Sample-data implementation of the catalog. The data module is loaded lazily, so it isn't bundled into the live site's main bundle. */
 import { summarize } from "../lib/priceStats";
 import { forecastSales } from "../lib/salePrediction";
-import type { GameDetail, PriceChange, UpcomingSale } from "../types";
+import type { GameDetail, MajorSale, UpcomingSale } from "../types";
 import type { CatalogApi } from "./catalog";
 
 const loadGames = () => import("../data/sampleData").then((m) => m.getSampleGames());
@@ -66,25 +66,12 @@ export const sampleCatalog: CatalogApi = {
     const summaries = games.map(summarize);
     const onSale = summaries.filter((s) => s.bestDeal && s.bestDeal.cut > 0);
 
-    const changes: PriceChange[] = games.flatMap((game) =>
-      game.listings.flatMap((listing) =>
-        listing.history.slice(1).map((point, i) => ({
-          game: { slug: game.slug, title: game.title, type: game.type, coverUrl: game.coverUrl },
-          storeId: listing.storeId,
-          timestamp: point.timestamp,
-          priceCents: point.priceCents,
-          regularCents: point.regularCents,
-          cut: point.cut,
-          previousCents: listing.history[i]!.priceCents,
-        })),
-      ),
-    );
-
-    // Same rules as the API's "Sales expected soon": likely, within 45 days, not on sale now.
+    // Same rules as the API: likely, within 45 days, not on sale now.
     const now = Date.now();
+    const forecasts = games.map((game) => forecastSales(game.listings, now)?.next ?? null);
     const upcomingSales: UpcomingSale[] = games
-      .flatMap((game, i) => {
-        const next = forecastSales(game.listings, now)?.next;
+      .flatMap((_, i) => {
+        const next = forecasts[i];
         const summary = summaries[i]!;
         const soon = next && next.expectedStart - now < 45 * 86_400_000 && (next.chance ?? 1) >= 0.5;
         if (!soon || (summary.bestDeal?.cut ?? 0) >= 10) return [];
@@ -102,19 +89,32 @@ export const sampleCatalog: CatalogApi = {
       .sort((a, b) => a.expectedStart.localeCompare(b.expectedStart))
       .slice(0, 10);
 
+    // The season most games' next sale falls in (within four months), as the API does.
+    const seasons = new Map<string, { starts: number[]; cuts: number[] }>();
+    for (const next of forecasts) {
+      if (!next || next.basis !== "event" || next.expectedStart - now > 120 * 86_400_000) continue;
+      const season = seasons.get(next.label) ?? { starts: [], cuts: [] };
+      season.starts.push(next.expectedStart);
+      if (next.typicalCut !== null) season.cuts.push(next.typicalCut);
+      seasons.set(next.label, season);
+    }
+    const middle = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor((xs.length - 1) / 2)];
+    const [label, top] = [...seasons].sort((a, b) => b[1].starts.length - a[1].starts.length)[0] ?? [];
+    const nextMajorSale: MajorSale | null = top
+      ? {
+          label: label!,
+          expectedStart: new Date(middle(top.starts)!).toISOString(),
+          games: top.starts.length,
+          typicalCut: top.cuts.length ? middle(top.cuts)! : null,
+        }
+      : null;
+
     return {
+      stats: { games: games.length, onSale: summaries.filter((s) => (s.bestDeal?.cut ?? 0) >= 10).length },
+      nextMajorSale,
       upcomingSales,
-      stats: {
-        games: games.length,
-        stores: new Set(games.flatMap((g) => g.listings.map((l) => l.storeId))).size,
-        priceChanges: games.reduce((n, g) => n + g.listings.reduce((m, l) => m + l.history.length, 0), 0),
-      },
       biggestSales: [...onSale].sort((a, b) => b.bestDeal!.cut - a.bestDeal!.cut).slice(0, 10),
       atHistoricalLow: onSale.filter((s) => s.isAtHistoricalLow).slice(0, 10),
-      latestChanges: changes.sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1)).slice(0, 10),
-      newReleases: [...summaries]
-        .sort((a, b) => (b.releaseDate ?? "").localeCompare(a.releaseDate ?? ""))
-        .slice(0, 10),
     };
   },
 };

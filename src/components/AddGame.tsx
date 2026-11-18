@@ -41,8 +41,8 @@ export function AddGame({ slug, itadId }: { slug: string; itadId: string }) {
       {add.isError ? (
         <>
           <h1 className="text-lg font-semibold">Couldn't add this game</h1>
-          <p className="mt-2 text-[13px] text-muted">{(add.error as Error).message}</p>
-          <div className="mt-5 flex justify-center gap-3 text-[13px]">
+          <p className="mt-2 text-sm text-muted">{(add.error as Error).message}</p>
+          <div className="mt-5 flex justify-center gap-3 text-sm">
             <button
               type="button"
               onClick={() => add.mutate()}
@@ -59,10 +59,7 @@ export function AddGame({ slug, itadId }: { slug: string; itadId: string }) {
         <div role="status" aria-live="polite">
           <LoaderCircle className="mx-auto size-6 animate-spin text-accent" aria-hidden />
           <h1 className="mt-4 text-lg font-semibold capitalize">Adding {title}</h1>
-          <p className="mt-2 text-[13px] text-muted">
-            Fetching up to 10 years of price history from IsThereAnyDeal. This takes a few seconds, and only happens
-            the first time anyone looks this game up.
-          </p>
+          <p className="mt-2 text-sm text-muted">Getting its price history. This takes a few seconds.</p>
         </div>
       )}
     </div>

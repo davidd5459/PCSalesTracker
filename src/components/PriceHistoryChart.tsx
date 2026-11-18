@@ -53,9 +53,9 @@ export function PriceHistoryChart({ listings, historicalLow, hidden }: Props) {
 
   return (
     <div>
-      <div className="h-[320px] w-full px-1 pt-3">
+      <div className="h-[320px] w-full px-1 pt-3 lg:h-[420px]">
         {visibleIds.length === 0 ? (
-          <div className="grid h-full place-items-center text-[13px] text-muted">Select at least one store.</div>
+          <div className="grid h-full place-items-center text-sm text-muted">Select at least one store.</div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={rows} margin={{ top: 8, right: 16, bottom: 0, left: 4 }}>
@@ -68,7 +68,7 @@ export function PriceHistoryChart({ listings, historicalLow, hidden }: Props) {
                 ticks={ticks}
                 tickFormatter={(t: number) => tickLabel(t)}
                 stroke={COLORS.axis}
-                tick={{ fontSize: 11, fontFamily: "IBM Plex Mono, monospace" }}
+                tick={{ fontSize: 11 }}
                 tickLine={false}
                 minTickGap={28}
               />
@@ -81,7 +81,7 @@ export function PriceHistoryChart({ listings, historicalLow, hidden }: Props) {
                 }
                 allowDecimals={false}
                 stroke={COLORS.axis}
-                tick={{ fontSize: 11, fontFamily: "IBM Plex Mono, monospace" }}
+                tick={{ fontSize: 11 }}
                 tickLine={false}
                 axisLine={false}
                 width={56}
@@ -127,7 +127,7 @@ export function PriceHistoryChart({ listings, historicalLow, hidden }: Props) {
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-3 py-2">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
-          <span className="font-mono">
+          <span className="">
             {formatDate(rangeStart)} → {formatDate(now)}
           </span>
           {historicalLow && (
@@ -155,7 +155,7 @@ export function PriceHistoryChart({ listings, historicalLow, hidden }: Props) {
               type="button"
               aria-pressed={r.id === rangeId}
               onClick={() => setRangeId(r.id)}
-              className={`rounded-sm px-2 py-0.5 font-mono text-xs transition-colors ${
+              className={`rounded-sm px-2 py-0.5 text-xs transition-colors ${
                 r.id === rangeId ? "bg-accent text-bg" : "bg-surface-2 text-muted hover:text-ink"
               }`}
             >
@@ -189,7 +189,7 @@ function ChartTooltip({
 
   return (
     <div className="min-w-56 rounded border border-line bg-surface px-3 py-2 text-xs shadow-xl shadow-black/60">
-      <div className="mb-1.5 font-mono text-faint">{row.t >= now ? "Today" : formatDate(row.t)}</div>
+      <div className="mb-1.5 text-faint">{row.t >= now ? "Today" : formatDate(row.t)}</div>
       <table className="w-full">
         <tbody>
           {entries.map((e) => (
@@ -200,8 +200,8 @@ function ChartTooltip({
                   {getStore(e.id).name}
                 </span>
               </td>
-              <td className="py-0.5 pr-2 text-right font-mono text-deal">{e.cut > 0 ? `-${e.cut}%` : ""}</td>
-              <td className={`py-0.5 text-right font-mono ${e.price === lowest ? "font-semibold text-ink" : "text-muted"}`}>
+              <td className="py-0.5 pr-2 text-right text-deal">{e.cut > 0 ? `-${e.cut}%` : ""}</td>
+              <td className={`py-0.5 text-right ${e.price === lowest ? "font-semibold text-ink" : "text-muted"}`}>
                 {formatCents(e.price)}
               </td>
             </tr>

@@ -68,6 +68,10 @@ describe("mapGameInfo", () => {
     expect(mapGameInfo({ ...base, type: "package" })).toBeNull();
   });
 
+  it("handles games with no images (sent as an empty list)", () => {
+    expect(mapGameInfo({ ...base, assets: [] })?.coverUrl).toBeNull();
+  });
+
   it("treats a missing type as a game", () => {
     expect(mapGameInfo({ ...base, type: null })?.type).toBe("game");
   });

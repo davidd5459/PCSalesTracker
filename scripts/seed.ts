@@ -1,7 +1,8 @@
 /**
  * npm run db:seed -- [--limit=200] [--refresh] [--include-mature]
  *
- * Imports the most popular games from IsThereAnyDeal with their full price
+ * Imports popular games from IsThereAnyDeal (most popular, then most
+ * waitlisted, then most collected; about 1,100 unique games in total) with their full price
  * history. Resumable: games already imported are skipped unless --refresh.
  * Seeded games are protected: they're never evicted to make room for searched-for games.
  */
@@ -12,7 +13,10 @@ import { loadEnv, requireEnv } from "../server/env.js";
 import { refreshForecasts } from "../server/ingest/forecasts.js";
 import { importGame } from "../server/ingest/importGame.js";
 import { syncStores } from "../server/ingest/stores.js";
-import { ItadClient } from "../server/itad/client.js";
+import { ItadClient, type RankedList } from "../server/itad/client.js";
+
+/** Lists to draw games from, most relevant first. */
+const LISTS: RankedList[] = ["most-popular", "most-waitlisted", "most-collected"];
 
 const { values: args } = parseArgs({
   options: {
@@ -33,14 +37,30 @@ try {
   const storeIdByShop = await syncStores(db, itad);
   console.log(`  tracking ${storeIdByShop.size} stores`);
 
-  console.log(`Fetching the ${limit} most popular games…`);
-  const ids: string[] = [];
+  // Merge ITAD's ranked lists in order until we have `limit` unique games.
+  // Each list ends at position 600 (later offsets repeat its last page), so stop
+  // reading a list once a page repeats that list. A page whose games all came
+  // from an earlier list is normal (the lists overlap), so keep going past those.
+  console.log(`Fetching up to ${limit} games from ITAD's ranked lists…`);
+  const unique = new Set<string>();
   const PAGE = 100;
-  for (let offset = 0; ids.length < limit; offset += PAGE) {
-    const page = await itad.mostPopular(offset, Math.min(PAGE, limit - ids.length));
-    if (page.length === 0) break;
-    ids.push(...page.map((g) => g.id));
+  for (const list of LISTS) {
+    const before = unique.size;
+    const seenInList = new Set<string>();
+    for (let offset = 0; unique.size < limit; offset += PAGE) {
+      const page = await itad.ranked(list, offset, PAGE);
+      const fresh = page.filter((g) => !seenInList.has(g.id));
+      if (fresh.length === 0) break; // end of this list
+      for (const g of fresh) {
+        seenInList.add(g.id);
+        if (unique.size < limit) unique.add(g.id);
+      }
+    }
+    console.log(`  ${list}: ${unique.size - before} new games`);
+    if (unique.size >= limit) break;
   }
+  const ids = [...unique];
+  if (ids.length < limit) console.log(`  (ITAD's lists only cover ${ids.length} unique games)`);
 
   const done = new Set(
     args.refresh

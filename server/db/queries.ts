@@ -4,7 +4,7 @@ import type {
   GameSummary,
   GameType,
   HomeSections,
-  PriceChange,
+  MajorSale,
   StoreListing,
   UpcomingSale,
 } from "../../src/types.js";
@@ -208,11 +208,30 @@ export async function getUpcomingSales(db: Queryable, days = 45, limit = 10): Pr
   }));
 }
 
+/**
+ * The next big sale season for most games: the season that the most games'
+ * forecasts point to next, within the coming four months. Its date is the
+ * median of those games' expected start dates.
+ */
+export async function getNextMajorSale(db: Queryable): Promise<MajorSale | null> {
+  const [row] = await db.query<{ label: string; games: number; expected: string; typical_cut: number | null }>(
+    `SELECT f.label, count(*)::int AS games,
+            ${iso("percentile_disc(0.5) WITHIN GROUP (ORDER BY f.next_sale_at)")} AS expected,
+            percentile_disc(0.5) WITHIN GROUP (ORDER BY f.typical_cut) AS typical_cut
+     FROM game_forecasts f
+     WHERE f.basis = 'event' AND f.next_sale_at > now() AND f.next_sale_at < now() + interval '120 days'
+     GROUP BY f.label
+     ORDER BY count(*) DESC, min(f.next_sale_at)
+     LIMIT 1`,
+  );
+  if (!row) return null;
+  return { label: row.label, expectedStart: row.expected, games: row.games, typicalCut: row.typical_cut };
+}
+
 export async function getHomeSections(db: Queryable): Promise<HomeSections> {
-  const [stats] = await db.query<{ games: number; stores: number; price_changes: number }>(
+  const [stats] = await db.query<{ games: number; on_sale: number }>(
     `SELECT (SELECT count(*)::int FROM games) AS games,
-            (SELECT count(DISTINCT store_id)::int FROM listings) AS stores,
-            (SELECT count(*)::int FROM price_points) AS price_changes`,
+            (SELECT count(*)::int FROM game_stats WHERE best_cut >= 10) AS on_sale`,
   );
 
   const biggestSales = await db.query<SummaryRow & Row>(
@@ -229,60 +248,12 @@ export async function getHomeSections(db: Queryable): Promise<HomeSections> {
      LIMIT 10`,
   );
 
-  const newReleases = await db.query<SummaryRow & Row>(
-    `SELECT ${SUMMARY_COLUMNS} FROM games g LEFT JOIN game_stats s USING (game_id)
-     WHERE g.release_date IS NOT NULL AND g.release_date <= CURRENT_DATE
-     ORDER BY g.release_date DESC
-     LIMIT 10`,
-  );
-
-  // Latest real price changes: take the newest points, then look up the
-  // price each one replaced (LATERAL = "for each row, run this subquery").
-  const changes = await db.query<{
-    slug: string;
-    title: string;
-    type: GameType;
-    cover_url: string | null;
-    store_id: string;
-    ts: string;
-    price_cents: number;
-    regular_cents: number;
-    cut: number;
-    previous_cents: number;
-  }>(
-    `SELECT g.slug, g.title, g.type, g.cover_url, l.store_id, ${iso("p.recorded_at")} AS ts,
-            p.price_cents, p.regular_cents, p.cut, prev.price_cents AS previous_cents
-     FROM (SELECT * FROM price_points WHERE recorded_at <= now() ORDER BY recorded_at DESC LIMIT 50) p
-     JOIN LATERAL (
-       SELECT q.price_cents FROM price_points q
-       WHERE q.listing_id = p.listing_id AND q.recorded_at < p.recorded_at
-       ORDER BY q.recorded_at DESC LIMIT 1
-     ) prev ON prev.price_cents <> p.price_cents
-     JOIN listings l ON l.listing_id = p.listing_id
-     JOIN games g ON g.game_id = l.game_id
-     ORDER BY p.recorded_at DESC
-     LIMIT 10`,
-  );
-
-  const upcomingSales = await getUpcomingSales(db);
-
   return {
-    stats: { games: stats!.games, stores: stats!.stores, priceChanges: stats!.price_changes },
-    upcomingSales,
+    stats: { games: stats!.games, onSale: stats!.on_sale },
+    nextMajorSale: await getNextMajorSale(db),
+    upcomingSales: await getUpcomingSales(db),
     biggestSales: biggestSales.map(toSummary),
     atHistoricalLow: atLow.map(toSummary),
-    newReleases: newReleases.map(toSummary),
-    latestChanges: changes.map(
-      (c): PriceChange => ({
-        game: { slug: c.slug, title: c.title, type: c.type, coverUrl: c.cover_url },
-        storeId: c.store_id,
-        timestamp: c.ts,
-        priceCents: c.price_cents,
-        regularCents: c.regular_cents,
-        cut: c.cut,
-        previousCents: c.previous_cents,
-      }),
-    ),
   };
 }
 

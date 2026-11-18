@@ -17,7 +17,7 @@
  * Everything is computed from the history already on the page, so it works the
  * same with sample data and live data.
  */
-import { formatCents, formatDate } from "./format.js";
+import { formatCents, formatDate, formatDayMonth, formatDaysUntil } from "./format.js";
 import { currentDeals, historicalLow } from "./priceStats.js";
 import type { StoreListing } from "../types.js";
 import { getStore } from "../config/stores.js";
@@ -47,12 +47,10 @@ export function likelihood(chance: number): Likelihood {
   return "low";
 }
 
-/** A recurring store event, as a yearly window of dates (UTC). */
+/** A recurring sale season: a yearly window of dates (UTC) when most stores run sales. */
 export interface SaleEvent {
   id: string;
   name: string;
-  /** Typical events that fall in this window. */
-  examples: string;
   /** 0-based month and day the window opens. */
   month: number;
   day: number;
@@ -60,18 +58,25 @@ export interface SaleEvent {
 }
 
 /**
- * Windows are deliberately wide: exact dates move a few days each year and
- * stores other than Steam often start a little early or late.
+ * Windows are deliberately wide: exact dates move a few days each year, and
+ * each store runs its own sale at a slightly different time within the season.
  */
 export const SALE_EVENTS: SaleEvent[] = [
-  { id: "lunar", name: "Lunar New Year sales", examples: "Steam Lunar New Year Sale", month: 0, day: 20, lengthDays: 26 },
-  { id: "spring", name: "Spring sales", examples: "Steam Spring Sale", month: 2, day: 8, lengthDays: 24 },
-  { id: "may", name: "May sales", examples: "Epic Mega Sale and other May promotions", month: 4, day: 8, lengthDays: 34 },
-  { id: "summer", name: "Summer sales", examples: "Steam Summer Sale, GOG Summer Sale", month: 5, day: 15, lengthDays: 28 },
-  { id: "halloween", name: "Halloween sales", examples: "Steam Scream Fest and Halloween promotions", month: 9, day: 20, lengthDays: 16 },
-  { id: "autumn", name: "Black Friday & autumn sales", examples: "Steam Autumn Sale, Black Friday", month: 10, day: 15, lengthDays: 21 },
-  { id: "winter", name: "Winter & holiday sales", examples: "Steam Winter Sale, Epic Holiday Sale", month: 11, day: 12, lengthDays: 28 },
+  { id: "lunar", name: "Lunar New Year sales", month: 0, day: 20, lengthDays: 26 },
+  { id: "spring", name: "Spring sales", month: 2, day: 8, lengthDays: 24 },
+  { id: "may", name: "May sales", month: 4, day: 8, lengthDays: 34 },
+  { id: "summer", name: "Summer sales", month: 5, day: 15, lengthDays: 28 },
+  { id: "halloween", name: "Halloween sales", month: 9, day: 20, lengthDays: 16 },
+  { id: "autumn", name: "Black Friday sales", month: 10, day: 15, lengthDays: 21 },
+  { id: "winter", name: "Winter sales", month: 11, day: 12, lengthDays: 28 },
 ];
+
+/** The season's date window, e.g. "Jan 20 – Feb 14". */
+export function eventWindow(event: SaleEvent): string {
+  const start = Date.UTC(2001, event.month, event.day);
+  const end = start + (event.lengthDays - 1) * DAY;
+  return `${formatDayMonth(start)} – ${formatDayMonth(end)}`;
+}
 
 /** A stretch of time one store had the game discounted. */
 export interface SaleEpisode {
@@ -116,6 +121,8 @@ export interface NextSale {
   chance: number | null;
   typicalCut: number | null;
   expectedPriceCents: number | null;
+  /** Where the game was usually cheapest in past sales like this one. */
+  likelyStoreId: string | null;
   basis: "event" | "rhythm";
 }
 
@@ -310,7 +317,7 @@ export function forecastSales(listings: StoreListing[], now: number): SaleForeca
   const typicalCut = median(sales.slice(-6).map((s) => s.cut));
   const lastSaleStart = sales.at(-1)?.start ?? null;
 
-  const next = pickNext(events, lastSaleStart, medianGapDays, recentSales.length, typicalCut, regularAt(best?.storeId ?? null), now);
+  const next = pickNext(events, lastSaleStart, medianGapDays, recentSales.length, typicalCut, best, now);
   const onSaleNow = Boolean(best && best.cut >= MIN_SALE_CUT);
 
   const verdict = decide({
@@ -344,7 +351,7 @@ function pickNext(
   medianGapDays: number | null,
   recentSaleCount: number,
   typicalCut: number | null,
-  regularCents: number,
+  best: { storeId: string; regularCents: number } | null,
   now: number,
 ): NextSale | null {
   const likely = events.find((e) => e.chance >= LIKELY);
@@ -355,20 +362,22 @@ function pickNext(
       chance: likely.chance,
       typicalCut: likely.typicalCut,
       expectedPriceCents: likely.expectedPriceCents,
+      likelyStoreId: likely.likelyStoreId,
       basis: "event",
     };
   }
-  // No yearly event is a good bet; fall back to the general rhythm if it's regular enough.
-  if (lastSaleStart !== null && medianGapDays !== null && recentSaleCount >= 4) {
+  // No sale season is a good bet; fall back to the game's usual gap between sales.
+  if (lastSaleStart !== null && medianGapDays !== null && recentSaleCount >= 4 && best) {
     const expectedStart = lastSaleStart + medianGapDays * DAY;
     if (expectedStart > now) {
       const cut = typicalCut === null ? null : Math.round(typicalCut);
       return {
         expectedStart,
-        label: "its usual sale rhythm",
+        label: "Regular sale",
         chance: null,
         typicalCut: cut,
-        expectedPriceCents: cut === null ? null : salePrice(regularCents, cut),
+        expectedPriceCents: cut === null ? null : salePrice(best.regularCents, cut),
+        likelyStoreId: best.storeId,
         basis: "rhythm",
       };
     }
@@ -388,6 +397,14 @@ interface DecideInput {
   now: number;
 }
 
+/** "Winter sales, around Dec 19: usually 43% off (about $34.19 at Steam)." */
+function describeNext(next: NextSale): string {
+  const store = next.likelyStoreId ? ` at ${getStore(next.likelyStoreId).name}` : "";
+  const price = next.expectedPriceCents !== null ? ` (about ${formatCents(next.expectedPriceCents)}${store})` : "";
+  const depth = next.typicalCut !== null ? `: usually ${next.typicalCut}% off${price}` : "";
+  return `${next.label}, around ${formatDate(next.expectedStart)}${depth}.`;
+}
+
 function decide(input: DecideInput): SaleForecast["verdict"] {
   const { best, next, onSaleNow, typicalCut, now } = input;
   if (!best) {
@@ -397,81 +414,60 @@ function decide(input: DecideInput): SaleForecast["verdict"] {
   const low = historicalLow(input.listings);
   const where = getStore(best.storeId).name;
   const daysToNext = next ? (next.expectedStart - now) / DAY : Infinity;
-  const nextText = next ? describeNext(next) : "";
+  const when = next ? formatDaysUntil(next.expectedStart, now) : "";
 
   // On sale at (or within 5% of) the lowest price ever: nothing to wait for.
   if (onSaleNow && low && best.priceCents <= Math.ceil(low.priceCents * 1.05)) {
     const exact = best.priceCents <= low.priceCents;
     return {
       kind: "buy",
-      headline: "Buy now",
-      detail: `${formatCents(best.priceCents)} at ${where} is ${exact ? "the lowest price on record" : "within 5% of the lowest price on record"}.`,
+      headline: exact ? "Buy now: lowest price ever" : "Buy now: near its lowest price ever",
+      detail: `${formatCents(best.priceCents)} at ${where} (${best.cut}% off).`,
     };
   }
 
   if (input.saleCount < 2 || input.trackedYears < 0.75) {
     return {
       kind: "unknown",
-      headline: "Not enough history yet",
-      detail: `We've seen ${input.saleCount === 1 ? "only one sale" : "no sales"} so far. Forecasts need a few past sales to spot a pattern.`,
+      headline: "Not enough history to predict",
+      detail: input.saleCount === 1 ? "Only one past sale so far." : "No past sales so far.",
     };
   }
 
   if (onSaleNow) {
     const deeperSoon = next?.typicalCut != null && next.typicalCut >= best.cut + 10 && daysToNext <= 75;
     if (deeperSoon) {
-      return {
-        kind: "wait",
-        headline: "A deeper sale is likely soon",
-        detail: `It's ${best.cut}% off now, but ${nextText}.`,
-      };
+      return { kind: "wait", headline: `Wait: a bigger sale is likely ${when}`, detail: describeNext(next!) };
     }
     if (typicalCut === null || best.cut >= typicalCut - 5) {
       return {
         kind: "buy",
         headline: "Good time to buy",
-        detail: `${best.cut}% off at ${where} is in line with this game's usual sales${typicalCut ? ` (typically ${typicalCut}% off)` : ""}.`,
+        detail: `${best.cut}% off at ${where}, about as low as its usual sales go.`,
       };
     }
     return {
       kind: "neutral",
-      headline: "Decent, but sales usually go deeper",
-      detail: `It's ${best.cut}% off now; recent sales reached about ${typicalCut}% off.${next ? ` Next: ${nextText}.` : ""}`,
+      headline: "On sale, but it usually goes lower",
+      detail: `${best.cut}% off now; its sales usually reach ${typicalCut}% off.${next ? ` Next: ${describeNext(next)}` : ""}`,
     };
   }
 
   if (next && daysToNext <= 60) {
-    return { kind: "wait", headline: "Wait for a sale", detail: `${capitalize(nextText)}.` };
+    return { kind: "wait", headline: `Wait: likely on sale ${when}`, detail: describeNext(next) };
   }
   if (next) {
-    return { kind: "neutral", headline: "No sale expected soon", detail: `Next likely sale: ${nextText}.` };
+    return { kind: "neutral", headline: `Next likely sale ${when}`, detail: describeNext(next) };
   }
   if (input.salesPerYear < 0.5) {
-    return {
-      kind: "neutral",
-      headline: "Rarely discounted",
-      detail: "This game has seldom gone on sale in the last three years, so waiting may not pay off.",
-    };
+    return { kind: "neutral", headline: "Rarely on sale", detail: "It has seldom been discounted in the last three years." };
   }
   return {
     kind: "neutral",
-    headline: "No clear sale pattern",
-    detail: `It goes on sale about ${Math.round(input.salesPerYear)} times a year, but not at predictable times.`,
+    headline: "No predictable sale pattern",
+    detail: `It goes on sale about ${Math.round(input.salesPerYear)} times a year, at no particular time.`,
   };
 }
-
-function describeNext(next: NextSale): string {
-  const when = `around ${formatDate(next.expectedStart)}`;
-  const depth =
-    next.typicalCut !== null
-      ? `, typically ~${next.typicalCut}% off${next.expectedPriceCents !== null ? ` (about ${formatCents(next.expectedPriceCents)})` : ""}`
-      : "";
-  return next.basis === "event"
-    ? `${next.label} usually discount it ${when}${depth}`
-    : `based on ${next.label}, the next sale is due ${when}${depth}`;
-}
-
-const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 // --- sale calendar ---------------------------------------------------------------
 

@@ -127,7 +127,7 @@ export function SearchBar({ size = "lg", autoFocus = false }: Props) {
           }}
           onFocus={() => setOpen(true)}
           onKeyDown={onKeyDown}
-          className={`min-w-0 flex-1 bg-transparent outline-none placeholder:text-faint ${isLarge ? "text-[15px]" : "text-[13px]"}`}
+          className={`min-w-0 flex-1 bg-transparent outline-none placeholder:text-faint ${isLarge ? "text-[15px]" : "text-sm"}`}
         />
         {busy && hasQuery && <LoaderCircle className="size-3.5 shrink-0 animate-spin text-faint" aria-hidden />}
         {query && (
@@ -149,23 +149,23 @@ export function SearchBar({ size = "lg", autoFocus = false }: Props) {
           className="absolute inset-x-0 top-full z-30 mt-1 max-h-[min(70vh,30rem)] overflow-y-auto rounded border border-line bg-surface py-1 shadow-xl shadow-black/60"
         >
           {options.length === 0 && !busy && (
-            <li className="px-3 py-3 text-[13px] text-muted">No games match “{debounced.trim()}”.</li>
+            <li className="px-3 py-3 text-sm text-muted">No games match “{debounced.trim()}”.</li>
           )}
 
           {results.map((game, i) => (
             <li key={game.slug} {...optionProps(i, { kind: "local", game })}>
               <CoverImage src={game.coverUrl} title={game.title} compact className="h-[30px] w-[64px] shrink-0 rounded-sm" />
               <div className="min-w-0 flex-1">
-                <div className="truncate text-[13px] font-medium">{game.title}</div>
+                <div className="truncate text-sm font-medium">{game.title}</div>
                 <div className="flex items-center gap-2 text-xs text-faint">
                   <TypeBadge type={game.type} />
-                  {game.releaseDate && <span className="font-mono">{game.releaseDate.slice(0, 4)}</span>}
+                  {game.releaseDate && <span className="">{game.releaseDate.slice(0, 4)}</span>}
                 </div>
               </div>
               {game.bestDeal && (
                 <div className="flex shrink-0 items-center gap-2">
                   <DiscountBadge cut={game.bestDeal.cut} />
-                  <span className="font-mono text-[13px] font-medium">{formatCents(game.bestDeal.priceCents)}</span>
+                  <span className="text-sm font-medium">{formatCents(game.bestDeal.priceCents)}</span>
                 </div>
               )}
             </li>
@@ -174,13 +174,13 @@ export function SearchBar({ size = "lg", autoFocus = false }: Props) {
           {(externalResults.length > 0 || (external.isFetching && results.length === 0)) && (
             <li
               role="presentation"
-              className={`px-3 pt-2 pb-1 text-[11px] font-medium uppercase tracking-wider text-faint ${
+              className={`px-3 pt-2 pb-1 text-xs font-medium text-faint ${
                 results.length > 0 ? "mt-1 border-t border-line" : ""
               }`}
             >
               {external.isFetching && externalResults.length === 0
-                ? "Searching more games…"
-                : "Not tracked yet · add with full price history"}
+                ? "Searching…"
+                : "Not in our list yet"}
             </li>
           )}
           {externalResults.map((game, j) => {
@@ -191,10 +191,10 @@ export function SearchBar({ size = "lg", autoFocus = false }: Props) {
                   <Plus className="size-3.5" aria-hidden />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[13px] font-medium">{game.title}</div>
+                  <div className="truncate text-sm font-medium">{game.title}</div>
                   <TypeBadge type={game.type} />
                 </div>
-                <span className="shrink-0 text-xs text-accent">Add</span>
+                <span className="shrink-0 text-sm text-accent">Add</span>
               </li>
             );
           })}

@@ -1,122 +1,85 @@
 import { CalendarClock, CircleHelp, Hourglass, ShoppingCart, type LucideIcon } from "lucide-react";
-import { useMemo } from "react";
-import { formatCents, formatDate } from "../lib/format";
-import { forecastSales, saleCalendar, type EventForecast, type VerdictKind } from "../lib/salePrediction";
-import type { StoreListing } from "../types";
+import { formatCents, formatDate, formatDaysUntil } from "../lib/format";
+import {
+  eventWindow,
+  type CalendarYear,
+  type EventForecast,
+  type SaleForecast,
+  type VerdictKind,
+} from "../lib/salePrediction";
 import { LikelihoodBadge, StoreLabel } from "./Badges";
 import { Panel, TH } from "./Panel";
 
-const VERDICT_STYLE: Record<VerdictKind, { icon: LucideIcon; tone: string }> = {
-  buy: { icon: ShoppingCart, tone: "border-deal/50 bg-deal/5 text-deal" },
-  wait: { icon: Hourglass, tone: "border-atl/50 bg-atl/5 text-atl" },
-  neutral: { icon: CalendarClock, tone: "border-accent/40 bg-accent/5 text-accent" },
-  unknown: { icon: CircleHelp, tone: "border-line bg-surface-2 text-muted" },
+const VERDICT_STYLE: Record<VerdictKind, { icon: LucideIcon; tone: string; iconTone: string }> = {
+  buy: { icon: ShoppingCart, tone: "border-l-deal", iconTone: "text-deal" },
+  wait: { icon: Hourglass, tone: "border-l-atl", iconTone: "text-atl" },
+  neutral: { icon: CalendarClock, tone: "border-l-accent", iconTone: "text-accent" },
+  unknown: { icon: CircleHelp, tone: "border-l-faint", iconTone: "text-muted" },
 };
 
-const MONTHS = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
-const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-/** Predicts the next sale from past sales and recurring yearly store events. */
-export function SaleForecastPanel({ listings }: { listings: StoreListing[] }) {
-  const { forecast, calendar } = useMemo(() => {
-    const now = Date.now();
-    return { forecast: forecastSales(listings, now), calendar: saleCalendar(listings, now) };
-  }, [listings]);
-
-  if (!forecast) return null;
-  const { verdict, next } = forecast;
+/** The buy-or-wait answer, as a large banner at the top of the game page. */
+export function SaleVerdict({ forecast }: { forecast: SaleForecast }) {
+  const { verdict } = forecast;
   const style = VERDICT_STYLE[verdict.kind];
   const Icon = style.icon;
-  const years = Math.max(1, Math.round((Date.now() - forecast.trackedSince) / (365.25 * 86_400_000)));
-
   return (
-    <Panel title="Sale forecast" meta={`Based on ${years} year${years === 1 ? "" : "s"} of price history`}>
-      <div className="space-y-3 p-3">
-        <div className={`flex gap-3 rounded border px-3 py-2.5 ${style.tone}`}>
-          <Icon className="mt-0.5 size-5 shrink-0" aria-hidden />
-          <div>
-            <p className="font-semibold">{verdict.headline}</p>
-            <p className="mt-0.5 text-[13px] text-ink/85">{verdict.detail}</p>
-          </div>
-        </div>
-
-        <dl className="grid grid-cols-2 gap-px overflow-hidden rounded border border-line bg-line sm:grid-cols-4">
-          <Stat label="Next likely sale" value={next ? formatDate(next.expectedStart) : "—"} sub={next?.label} />
-          <Stat
-            label="Expected discount"
-            value={next?.typicalCut != null ? `~${next.typicalCut}%` : "—"}
-            sub={next?.expectedPriceCents != null ? `about ${formatCents(next.expectedPriceCents)}` : undefined}
-            valueClass="text-deal"
-          />
-          <Stat
-            label="Sales per year"
-            value={forecast.salesPerYear > 0 ? forecast.salesPerYear.toFixed(1) : "0"}
-            sub={forecast.medianGapDays ? `every ~${forecast.medianGapDays} days` : "last 3 years"}
-          />
-          <Stat
-            label="Typical discount"
-            value={forecast.typicalCut != null ? `${forecast.typicalCut}%` : "—"}
-            sub={forecast.lastSaleStart ? `last sale ${formatDate(forecast.lastSaleStart)}` : undefined}
-          />
-        </dl>
+    <section className={`flex items-center gap-4 rounded border border-l-4 border-line bg-surface px-5 py-4 ${style.tone}`}>
+      <Icon className={`size-8 shrink-0 ${style.iconTone}`} aria-hidden />
+      <div>
+        <h2 className="text-xl font-semibold">{verdict.headline}</h2>
+        <p className="mt-0.5 text-[15px] text-muted">{verdict.detail}</p>
       </div>
-
-      {forecast.events.length > 0 && <EventTable events={forecast.events} />}
-      {calendar.length > 0 && <SaleCalendar calendar={calendar} />}
-
-      <p className="border-t border-line px-3 py-2 text-[11px] text-faint">
-        Estimates from this game's past sales and recurring store events. Stores set their own schedules, so
-        treat these as likely, not guaranteed.
-      </p>
-    </Panel>
+    </section>
   );
 }
 
-function Stat({ label, value, sub, valueClass = "" }: { label: string; value: string; sub?: string; valueClass?: string }) {
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** Upcoming sale seasons for this game, plus a month-by-month record of past sales. */
+export function UpcomingSalesPanel({ forecast, calendar }: { forecast: SaleForecast; calendar: CalendarYear[] }) {
+  if (forecast.events.length === 0 && calendar.length === 0) return null;
   return (
-    <div className="bg-surface px-3 py-2">
-      <dt className="text-[11px] uppercase tracking-wider text-faint">{label}</dt>
-      <dd className={`mt-0.5 font-mono text-[15px] font-semibold ${valueClass}`}>{value}</dd>
-      {sub && <dd className="truncate text-[11px] text-muted" title={sub}>{sub}</dd>}
-    </div>
+    <Panel title="Upcoming sales">
+      {forecast.events.length > 0 && <EventTable events={forecast.events} />}
+      {calendar.length > 0 && <SaleCalendar calendar={calendar} />}
+    </Panel>
   );
 }
 
 function EventTable({ events }: { events: EventForecast[] }) {
   return (
-    <div className="overflow-x-auto border-t border-line">
-      <table className="w-full min-w-[620px]">
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[720px]">
         <thead>
           <tr className="border-b border-line">
-            <th className={TH}>Upcoming event</th>
+            <th className={TH}>Sale season</th>
             <th className={TH}>Expected</th>
             <th className={TH}>Chance</th>
-            <th className={`${TH} text-right`}>Typical</th>
-            <th className={`${TH} text-right`}>Est. price</th>
+            <th className={`${TH} text-right`}>Usually</th>
+            <th className={`${TH} text-right`}>Price then</th>
             <th className={TH}>Past years</th>
           </tr>
         </thead>
         <tbody>
           {events.map((e) => (
-            <tr key={e.event.id} className="border-b border-line/60 text-[13px] last:border-0">
+            <tr key={e.event.id} className="border-b border-line/60 last:border-0">
               <td className="px-3 py-2">
                 <div className="font-medium">{e.event.name}</div>
-                <div className="text-[11px] text-faint">{e.event.examples}</div>
+                <div className="text-xs text-faint">{eventWindow(e.event)}</div>
               </td>
-              <td className="px-3 py-2 font-mono whitespace-nowrap">{formatDate(e.expectedStart)}</td>
+              <td className="whitespace-nowrap px-3 py-2">
+                {formatDate(e.expectedStart)}
+                <div className="text-xs text-muted">{formatDaysUntil(e.expectedStart)}</div>
+              </td>
               <td className="px-3 py-2">
                 <LikelihoodBadge chance={e.chance} />
               </td>
-              <td className="px-3 py-2 text-right font-mono">{e.typicalCut != null ? `-${e.typicalCut}%` : "—"}</td>
+              <td className="px-3 py-2 text-right">{e.typicalCut != null ? `${e.typicalCut}% off` : "—"}</td>
               <td className="px-3 py-2 text-right">
-                {e.expectedPriceCents != null ? (
-                  <span className="font-mono">{formatCents(e.expectedPriceCents)}</span>
-                ) : (
-                  "—"
-                )}
+                {e.expectedPriceCents != null ? <span className="font-medium">~{formatCents(e.expectedPriceCents)}</span> : "—"}
                 {e.likelyStoreId && (
-                  <div className="text-[11px] text-faint">
-                    <StoreLabel storeId={e.likelyStoreId} />
+                  <div className="text-xs text-faint" title="Where this game was cheapest during this season in past years">
+                    cheapest at <StoreLabel storeId={e.likelyStoreId} />
                   </div>
                 )}
               </td>
@@ -144,8 +107,8 @@ function TrackRecord({ record, hits }: { record: EventForecast["record"]; hits: 
           />
         ))}
       </div>
-      <span className="text-[11px] whitespace-nowrap text-faint">
-        {hits} of {record.length} yrs
+      <span className="whitespace-nowrap text-xs text-faint">
+        on sale {hits} of {record.length} years
       </span>
     </div>
   );
@@ -154,18 +117,16 @@ function TrackRecord({ record, hits }: { record: EventForecast["record"]; hits: 
 /** Deeper discounts get a stronger green. */
 const heat = (cut: number) => `color-mix(in oklab, var(--color-deal) ${Math.round(25 + cut * 0.75)}%, transparent)`;
 
-function SaleCalendar({ calendar }: { calendar: ReturnType<typeof saleCalendar> }) {
+function SaleCalendar({ calendar }: { calendar: CalendarYear[] }) {
   return (
     <div className="border-t border-line px-3 py-3">
-      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-[13px] font-semibold">Sale calendar</h3>
-        <span className="text-[11px] text-faint">Deepest discount at any store, by month</span>
-      </div>
-      <div className="grid grid-cols-[2.5rem_repeat(12,minmax(0,1fr))] gap-0.5 font-mono text-[10px]">
+      <h3 className="mb-2 text-sm font-medium">Past sales by month</h3>
+      <div className="grid grid-cols-[2.75rem_repeat(12,minmax(0,1fr))] gap-0.5 text-xs">
         <span />
-        {MONTHS.map((m, i) => (
-          <span key={i} className="text-center text-faint" title={MONTH_NAMES[i]}>
-            {m}
+        {MONTHS.map((m) => (
+          <span key={m} className="text-center text-faint">
+            {m.charAt(0)}
+            <span className="hidden md:inline">{m.slice(1)}</span>
           </span>
         ))}
         {calendar.map((row) => (
@@ -181,13 +142,13 @@ function CalendarRow({ year, months }: { year: number; months: (number | null)[]
     <>
       <span className="self-center text-faint">{year}</span>
       {months.map((cut, m) => {
-        const label = `${MONTH_NAMES[m]} ${year}: ${cut === null ? "not tracked" : cut === 0 ? "no sale" : `up to ${cut}% off`}`;
+        const label = `${MONTHS[m]} ${year}: ${cut === null ? "not tracked" : cut === 0 ? "no sale" : `up to ${cut}% off`}`;
         return (
           <span
             key={m}
             title={label}
             aria-label={label}
-            className={`flex h-5 items-center justify-center rounded-[2px] ${
+            className={`flex h-6 items-center justify-center rounded-[2px] ${
               cut === null ? "" : cut === 0 ? "bg-surface-2" : `font-semibold ${cut >= 45 ? "text-bg" : "text-ink"}`
             }`}
             style={cut ? { backgroundColor: heat(cut) } : undefined}

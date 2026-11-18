@@ -174,7 +174,18 @@ describe("GET /api/home", () => {
     const cuts = body.biggestSales.map((g) => g.bestDeal!.cut);
     expect(cuts).toEqual([...cuts].sort((a, b) => b - a));
     expect(body.atHistoricalLow.every((g) => g.isAtHistoricalLow)).toBe(true);
-    expect(body.latestChanges.every((c) => c.priceCents !== c.previousCents)).toBe(true);
+    const [onSale] = await db.query<{ n: number }>("SELECT count(*)::int AS n FROM game_stats WHERE best_cut >= 10");
+    expect(body.stats.onSale).toBe(onSale!.n);
+  });
+
+  it("names the next sale season most games are expected to join", async () => {
+    const { body } = await get<HomeSections>("/api/home");
+    const sale = body.nextMajorSale!;
+    expect(sale).not.toBeNull();
+    expect(sale.games).toBeGreaterThan(0);
+    const days = (Date.parse(sale.expectedStart) - Date.now()) / 86_400_000;
+    expect(days).toBeGreaterThan(0);
+    expect(days).toBeLessThan(120);
   });
 });
 

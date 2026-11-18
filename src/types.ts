@@ -66,17 +66,6 @@ export interface GameDetail {
   listings: StoreListing[];
 }
 
-/** A single price change at one store, used by the home page feed. */
-export interface PriceChange {
-  game: Pick<GameSummary, "slug" | "title" | "type" | "coverUrl">;
-  storeId: string;
-  timestamp: string;
-  priceCents: number;
-  regularCents: number;
-  cut: number;
-  previousCents: number;
-}
-
 /** A game we expect to go on sale soon (from the sale forecast). */
 export interface UpcomingSale {
   game: GameSummary;
@@ -98,11 +87,20 @@ export interface ExternalGame {
   type: GameType;
 }
 
+/** The sale season most games are expected to join next. */
+export interface MajorSale {
+  label: string;
+  /** Typical expected start across those games (ISO 8601). */
+  expectedStart: string;
+  /** How many tracked games are likely to be discounted in it. */
+  games: number;
+  typicalCut: number | null;
+}
+
 export interface HomeSections {
-  stats: { games: number; stores: number; priceChanges: number };
+  stats: { games: number; onSale: number };
+  nextMajorSale: MajorSale | null;
   upcomingSales: UpcomingSale[];
   biggestSales: GameSummary[];
   atHistoricalLow: GameSummary[];
-  latestChanges: PriceChange[];
-  newReleases: GameSummary[];
 }

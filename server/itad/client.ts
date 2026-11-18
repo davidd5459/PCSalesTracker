@@ -27,6 +27,8 @@ export function toItadTime(iso: string): string {
   return new Date(iso).toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 
+export type RankedList = "most-popular" | "most-waitlisted" | "most-collected";
+
 export class ItadError extends Error {
   constructor(
     message: string,
@@ -78,6 +80,11 @@ export class ItadClient {
       params: { country: COUNTRY, shops: shops.join(",") },
       body: ids,
     });
+  }
+
+  /** A ranked list of games. ITAD's lists end at position 600; later offsets repeat the last page. */
+  ranked(list: RankedList, offset: number, limit: number) {
+    return this.request(PopularResponse, `/stats/${list}/v1`, { params: { offset, limit } });
   }
 
   mostPopular(offset: number, limit: number) {

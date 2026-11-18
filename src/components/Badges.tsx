@@ -5,7 +5,7 @@ import type { GameType } from "../types";
 export function DiscountBadge({ cut, className = "" }: { cut: number; className?: string }) {
   if (cut <= 0) return null;
   return (
-    <span className={`rounded-sm bg-deal/15 px-1 py-px font-mono text-xs font-semibold text-deal ${className}`}>
+    <span className={`rounded-sm bg-deal/15 px-1 py-px text-xs font-semibold text-deal ${className}`}>
       -{cut}%
     </span>
   );
@@ -15,7 +15,7 @@ export function DiscountBadge({ cut, className = "" }: { cut: number; className?
 export function AtlBadge({ short = false, className = "" }: { short?: boolean; className?: string }) {
   return (
     <span
-      className={`rounded-sm border border-atl/50 bg-atl/10 px-1 py-px text-[11px] font-semibold uppercase tracking-wide text-atl ${className}`}
+      className={`rounded-sm border border-atl/50 bg-atl/10 px-1 py-px text-xs font-semibold text-atl ${className}`}
       title="Matches or beats the lowest price ever recorded"
     >
       {short ? "ATL" : "All-time low"}
@@ -27,7 +27,7 @@ export function TypeBadge({ type }: { type: GameType }) {
   const isDlc = type === "dlc";
   return (
     <span
-      className={`rounded-sm border px-1 text-[10px] font-semibold uppercase leading-4 tracking-wider ${
+      className={`rounded-sm border px-1 text-xs font-semibold leading-4 ${
         isDlc ? "border-violet-400/40 text-violet-300" : "border-line text-muted"
       }`}
     >
@@ -57,7 +57,7 @@ export function LikelihoodBadge({ chance }: { chance: number }) {
   const style = LIKELIHOOD_STYLE[likelihood(chance)];
   return (
     <span
-      className={`inline-block rounded-sm border px-1.5 text-[11px] font-medium leading-4 ${style.tone}`}
+      className={`inline-block rounded-sm border px-1.5 text-xs font-medium leading-4 ${style.tone}`}
       title={style.hint}
     >
       {style.label}
