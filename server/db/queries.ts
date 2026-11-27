@@ -174,8 +174,11 @@ export async function storeIdsByShop(db: Queryable): Promise<Map<number, string>
   return new Map(rows.map((r) => [r.itad_shop_id, r.store_id]));
 }
 
-/** Games expected to go on sale within the next `days` days that aren't on sale now. */
-export async function getUpcomingSales(db: Queryable, days = 45, limit = 10): Promise<UpcomingSale[]> {
+/**
+ * Games expected to go on sale within `days` days of `now` (milliseconds) that aren't on sale now.
+ * `now` is passed in rather than read from the database clock so tests can fix the date.
+ */
+export async function getUpcomingSales(db: Queryable, now: number, days = 45, limit = 10): Promise<UpcomingSale[]> {
   const rows = await db.query<
     SummaryRow & {
       next_sale_at: string;
@@ -190,13 +193,13 @@ export async function getUpcomingSales(db: Queryable, days = 45, limit = 10): Pr
      FROM game_forecasts f
      JOIN games g USING (game_id)
      LEFT JOIN game_stats s USING (game_id)
-     WHERE f.next_sale_at > now()
-       AND f.next_sale_at < now() + make_interval(days => $1)
+     WHERE f.next_sale_at > $1::timestamptz
+       AND f.next_sale_at < $1::timestamptz + make_interval(days => $2)
        AND (f.chance IS NULL OR f.chance >= 0.5)
        AND COALESCE(s.best_cut, 0) < 10   -- already on sale: it's in "Biggest discounts" instead
      ORDER BY f.next_sale_at::date, f.chance DESC NULLS LAST, f.typical_cut DESC NULLS LAST, g.title
-     LIMIT $2`,
-    [days, limit],
+     LIMIT $3`,
+    [new Date(now).toISOString(), days, limit],
   );
   return rows.map((r) => ({
     game: toSummary(r),
@@ -210,25 +213,27 @@ export async function getUpcomingSales(db: Queryable, days = 45, limit = 10): Pr
 
 /**
  * The next big sale season for most games: the season that the most games'
- * forecasts point to next, within the coming four months. Its date is the
- * median of those games' expected start dates.
+ * forecasts point to next, within four months of `now` (milliseconds). Its date
+ * is the median of those games' expected start dates.
  */
-export async function getNextMajorSale(db: Queryable): Promise<MajorSale | null> {
+export async function getNextMajorSale(db: Queryable, now: number): Promise<MajorSale | null> {
   const [row] = await db.query<{ label: string; games: number; expected: string; typical_cut: number | null }>(
     `SELECT f.label, count(*)::int AS games,
             ${iso("percentile_disc(0.5) WITHIN GROUP (ORDER BY f.next_sale_at)")} AS expected,
             percentile_disc(0.5) WITHIN GROUP (ORDER BY f.typical_cut) AS typical_cut
      FROM game_forecasts f
-     WHERE f.basis = 'event' AND f.next_sale_at > now() AND f.next_sale_at < now() + interval '120 days'
+     WHERE f.basis = 'event' AND f.next_sale_at > $1::timestamptz AND f.next_sale_at < $1::timestamptz + interval '120 days'
      GROUP BY f.label
      ORDER BY count(*) DESC, min(f.next_sale_at)
      LIMIT 1`,
+    [new Date(now).toISOString()],
   );
   if (!row) return null;
   return { label: row.label, expectedStart: row.expected, games: row.games, typicalCut: row.typical_cut };
 }
 
-export async function getHomeSections(db: Queryable): Promise<HomeSections> {
+/** Home page sections as of `now` (milliseconds). */
+export async function getHomeSections(db: Queryable, now: number): Promise<HomeSections> {
   const [stats] = await db.query<{ games: number; on_sale: number }>(
     `SELECT (SELECT count(*)::int FROM games) AS games,
             (SELECT count(*)::int FROM game_stats WHERE best_cut >= 10) AS on_sale`,
@@ -250,8 +255,8 @@ export async function getHomeSections(db: Queryable): Promise<HomeSections> {
 
   return {
     stats: { games: stats!.games, onSale: stats!.on_sale },
-    nextMajorSale: await getNextMajorSale(db),
-    upcomingSales: await getUpcomingSales(db),
+    nextMajorSale: await getNextMajorSale(db, now),
+    upcomingSales: await getUpcomingSales(db, now),
     biggestSales: biggestSales.map(toSummary),
     atHistoricalLow: atLow.map(toSummary),
   };

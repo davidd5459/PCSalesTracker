@@ -37,10 +37,15 @@ export interface AppDeps {
   withWriteDb?: <T>(fn: (db: Db) => Promise<T>) => Promise<T>;
   /** IsThereAnyDeal client; needed for external search and imports. */
   getItad?: () => ItadClient;
+  /**
+   * Current time in milliseconds, for anything that depends on the calendar
+   * (sale forecasts, upcoming sales). Defaults to the real clock; tests fix it.
+   */
+  now?: () => number;
 }
 
-/** The API. Takes its dependencies as arguments so tests can inject an in-memory database and a fake ITAD. */
-export function createApp({ getDb, withWriteDb, getItad }: AppDeps) {
+/** The API. Takes its dependencies as arguments so tests can inject an in-memory database, a fake ITAD and a fixed clock. */
+export function createApp({ getDb, withWriteDb, getItad, now = Date.now }: AppDeps) {
   const app = new Hono().basePath("/api");
 
   const requireItad = () => {
@@ -100,7 +105,7 @@ export function createApp({ getDb, withWriteDb, getItad }: AppDeps) {
     if (!parsed.success) return c.json({ error: "Expected { itadId: <uuid> }" }, 400);
     if (!withWriteDb) throw new ConfigError("Imports are not configured");
     const itad = requireItad();
-    const slug = await withWriteDb((db) => importOnDemand(db, itad, parsed.data.itadId));
+    const slug = await withWriteDb((db) => importOnDemand(db, itad, parsed.data.itadId, {}, now()));
     return c.json({ slug });
   });
 
@@ -117,7 +122,7 @@ export function createApp({ getDb, withWriteDb, getItad }: AppDeps) {
   });
 
   app.get("/home", async (c) => {
-    const sections = await getHomeSections(getDb());
+    const sections = await getHomeSections(getDb(), now());
     cacheAtCdn(c);
     return c.json(sections);
   });

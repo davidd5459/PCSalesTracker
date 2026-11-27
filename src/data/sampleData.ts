@@ -219,9 +219,19 @@ function generateGame(spec: SampleGameSpec, now: number): GameDetail {
   };
 }
 
+/**
+ * The sample games as they'd look at `now`. Seasonal sales fall on fixed calendar
+ * dates, so the result depends on the date: in late November every game is on sale.
+ * Tests pass a fixed `now` so they see the same data on every run.
+ */
+export function generateSampleGames(now: number): GameDetail[] {
+  return SPECS.map((spec) => generateGame(spec, now));
+}
+
 let cache: GameDetail[] | null = null;
 
+/** The sample games as of the first call (cached, so the data doesn't shift while the app runs). */
 export function getSampleGames(): GameDetail[] {
-  cache ??= SPECS.map((spec) => generateGame(spec, Date.now()));
+  cache ??= generateSampleGames(Date.now());
   return cache;
 }

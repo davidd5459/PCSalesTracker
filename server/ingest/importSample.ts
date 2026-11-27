@@ -1,16 +1,17 @@
 /** Loads the generated sample games into a database (for tests and trying the API before ITAD is set up). */
 import { STORES } from "../../src/config/stores.js";
-import { getSampleGames } from "../../src/data/sampleData.js";
+import { generateSampleGames } from "../../src/data/sampleData.js";
 import type { Db } from "../db/client.js";
 import { refreshForecasts } from "./forecasts.js";
 import { refreshGameStats, saveListingHistory, upsertGame, upsertStores } from "../db/writes.js";
 
-export async function importSampleGames(db: Db): Promise<number> {
+/** Load the sample games as they'd look at `now` (milliseconds), with forecasts made as of `now`. */
+export async function importSampleGames(db: Db, now = Date.now()): Promise<number> {
   await upsertStores(
     db,
     STORES.map((s, i) => ({ storeId: s.id, name: s.name, itadShopId: s.itad?.shopId ?? null, sortOrder: i })),
   );
-  const games = getSampleGames();
+  const games = generateSampleGames(now);
   await db.transaction(async (tx) => {
     const ids = new Map<string, number>();
     for (const g of games) {
@@ -38,6 +39,6 @@ export async function importSampleGames(db: Db): Promise<number> {
     }
   });
   await refreshGameStats(db);
-  await refreshForecasts(db);
+  await refreshForecasts(db, undefined, now);
   return games.length;
 }

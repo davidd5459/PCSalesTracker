@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { getSampleGames } from "../../src/data/sampleData.js";
+import { generateSampleGames } from "../../src/data/sampleData.js";
 import { summarize } from "../../src/lib/priceStats.js";
 import type { ExternalGame, GameDetail, GameSummary, HomeSections } from "../../src/types.js";
 import { createApp } from "../app.js";
@@ -13,6 +13,14 @@ import { createTestDb } from "../test/pgliteDb.js";
 
 let db: Db;
 let app: ReturnType<typeof createApp>;
+
+/**
+ * The date these tests run "at". Sample sales follow the calendar, so with the real
+ * date the home page changes through the year (every game is on sale in late November,
+ * and some months have no sale coming up), and tests that passed one week failed the next.
+ * Nov 3 has a bit of everything: games on sale, sales coming up, Black Friday ahead.
+ */
+const NOW = Date.parse("2026-11-03T00:00:00Z");
 
 // --- a fake IsThereAnyDeal, so tests run offline ---------------------------------
 
@@ -71,8 +79,8 @@ const fakeItad = {
 beforeAll(async () => {
   db = await createTestDb();
   await runMigrations(db);
-  await importSampleGames(db);
-  app = createApp({ getDb: () => db, withWriteDb: (fn) => fn(db), getItad: () => fakeItad });
+  await importSampleGames(db, NOW);
+  app = createApp({ getDb: () => db, withWriteDb: (fn) => fn(db), getItad: () => fakeItad, now: () => NOW });
 }, 60_000);
 
 afterAll(() => db?.close());
@@ -114,7 +122,7 @@ describe("GET /api/games/:slug", () => {
 
 describe("SQL summaries match the frontend's TypeScript logic", () => {
   it("agrees on best deal and all-time low for every game", async () => {
-    for (const game of getSampleGames()) {
+    for (const game of generateSampleGames(NOW)) {
       const expected = summarize(game);
       const { body } = await get<GameSummary[]>(`/api/search?q=${encodeURIComponent(game.title)}&limit=25`);
       const actual = body.find((s) => s.slug === game.slug);
@@ -169,7 +177,7 @@ describe("GET /api/home", () => {
   it("returns populated sections", async () => {
     const { status, body } = await get<HomeSections>("/api/home");
     expect(status).toBe(200);
-    expect(body.stats.games).toBe(getSampleGames().length);
+    expect(body.stats.games).toBe(generateSampleGames(NOW).length);
     expect(body.biggestSales.length).toBeGreaterThan(0);
     const cuts = body.biggestSales.map((g) => g.bestDeal!.cut);
     expect(cuts).toEqual([...cuts].sort((a, b) => b - a));
@@ -183,7 +191,7 @@ describe("GET /api/home", () => {
     const sale = body.nextMajorSale!;
     expect(sale).not.toBeNull();
     expect(sale.games).toBeGreaterThan(0);
-    const days = (Date.parse(sale.expectedStart) - Date.now()) / 86_400_000;
+    const days = (Date.parse(sale.expectedStart) - NOW) / 86_400_000;
     expect(days).toBeGreaterThan(0);
     expect(days).toBeLessThan(120);
   });
@@ -192,17 +200,26 @@ describe("GET /api/home", () => {
 describe("sales expected soon", () => {
   it("lists likely upcoming sales for games that aren't already on sale", async () => {
     const { body } = await get<HomeSections>("/api/home");
-    const now = Date.now();
     expect(body.upcomingSales.length).toBeGreaterThan(0);
     for (const s of body.upcomingSales) {
       const t = Date.parse(s.expectedStart);
-      expect(t).toBeGreaterThan(now);
-      expect(t - now).toBeLessThan(45 * 86_400_000);
+      expect(t).toBeGreaterThan(NOW);
+      expect(t - NOW).toBeLessThan(45 * 86_400_000);
       expect(s.chance === null || s.chance >= 0.5).toBe(true);
       expect(s.game.bestDeal?.cut ?? 0).toBeLessThan(10);
     }
     const times = body.upcomingSales.map((s) => s.expectedStart.slice(0, 10));
     expect(times).toEqual([...times].sort());
+
+    // On NOW, some games with a likely sale coming up are already on sale. They must be
+    // left out (the cut < 10 check above), and this makes sure that case is really exercised.
+    const [onSaleSoon] = await db.query<{ n: number }>(
+      `SELECT count(*)::int AS n FROM game_forecasts f JOIN game_stats s USING (game_id)
+       WHERE f.next_sale_at > $1::timestamptz AND f.next_sale_at < $1::timestamptz + interval '45 days'
+         AND (f.chance IS NULL OR f.chance >= 0.5) AND s.best_cut >= 10`,
+      [new Date(NOW).toISOString()],
+    );
+    expect(onSaleSoon!.n).toBeGreaterThan(0);
   });
 });
 
@@ -252,7 +269,7 @@ describe("adding untracked games", () => {
     expect((await post(null)).status).toBe(400);
 
     const other = "018d937f-aaaa-7000-8000-0000000000ff";
-    await expect(importOnDemand(db, fakeItad, other, { perHour: 0, maxGames: 99_999 })).rejects.toMatchObject({
+    await expect(importOnDemand(db, fakeItad, other, { perHour: 0, maxGames: 99_999 }, NOW)).rejects.toMatchObject({
       status: 429,
     });
   });
@@ -276,7 +293,7 @@ describe("re-importing", () => {
   it("adds no duplicate price points", async () => {
     const count = async () => (await db.query<{ n: number }>("SELECT count(*)::int AS n FROM price_points"))[0]!.n;
     const before = await count();
-    await importSampleGames(db);
+    await importSampleGames(db, NOW);
     expect(await count()).toBe(before);
   });
 });
@@ -298,7 +315,7 @@ describe("replacing the least recently viewed game when full", () => {
     await ageView("terraria", 2);
     const before = await total();
 
-    const slug = await importOnDemand(db, fakeItad, id("00a1"), { perHour: 99, maxGames: before });
+    const slug = await importOnDemand(db, fakeItad, id("00a1"), { perHour: 99, maxGames: before }, NOW);
     expect(slug).toBe("extra-game-00a1");
     expect(await total()).toBe(before); // one in, one out
     expect(await exists("celeste")).toBe(false);
@@ -311,7 +328,7 @@ describe("replacing the least recently viewed game when full", () => {
     // The newly added game was viewed an hour ago, so it's now the least recently viewed.
     await db.query("UPDATE games SET last_viewed_at = now() - interval '1 hour' WHERE slug = 'extra-game-00a1'");
     const before = await total();
-    await importOnDemand(db, fakeItad, id("00a2"), { perHour: 99, maxGames: before });
+    await importOnDemand(db, fakeItad, id("00a2"), { perHour: 99, maxGames: before }, NOW);
     expect(await exists("terraria")).toBe(true);
     expect(await exists("extra-game-00a1")).toBe(false);
   });
@@ -319,7 +336,7 @@ describe("replacing the least recently viewed game when full", () => {
   it("never evicts protected games, and refuses when every game is protected", async () => {
     await db.query("UPDATE games SET protected = TRUE");
     const before = await total();
-    await expect(importOnDemand(db, fakeItad, id("00a3"), { perHour: 99, maxGames: before })).rejects.toMatchObject({
+    await expect(importOnDemand(db, fakeItad, id("00a3"), { perHour: 99, maxGames: before }, NOW)).rejects.toMatchObject({
       status: 503,
     });
     expect(await total()).toBe(before);
@@ -329,7 +346,7 @@ describe("replacing the least recently viewed game when full", () => {
     await ageView("terraria", 10);
     const before = await total();
     // Far below the game cap, but over a (tiny) storage limit.
-    await importOnDemand(db, fakeItad, id("00a4"), { perHour: 99, maxGames: 99_999, maxBytes: 1 });
+    await importOnDemand(db, fakeItad, id("00a4"), { perHour: 99, maxGames: 99_999, maxBytes: 1 }, NOW);
     expect(await total()).toBe(before);
     expect(await exists("terraria")).toBe(false);
     expect(await exists("extra-game-00a4")).toBe(true);
@@ -338,7 +355,7 @@ describe("replacing the least recently viewed game when full", () => {
   it("doesn't evict anything when the import itself fails", async () => {
     await ageView("extra-game-00a4", 5);
     const before = await total();
-    await expect(importOnDemand(db, fakeItad, BUNDLE_ID, { perHour: 99, maxGames: before })).rejects.toMatchObject({
+    await expect(importOnDemand(db, fakeItad, BUNDLE_ID, { perHour: 99, maxGames: before }, NOW)).rejects.toMatchObject({
       status: 422,
     });
     expect(await exists("extra-game-00a4")).toBe(true);

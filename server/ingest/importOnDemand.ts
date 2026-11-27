@@ -45,12 +45,16 @@ export class ImportRefused extends Error {
   }
 }
 
-/** Import a game by ITAD id (or find it if already tracked) and return its slug. */
+/**
+ * Import a game by ITAD id (or find it if already tracked) and return its slug.
+ * `now` (milliseconds) is the date its sale forecast is made from.
+ */
 export async function importOnDemand(
   db: Db,
   itad: ItadClient,
   itadId: string,
   overrides: Partial<ImportLimits> = {},
+  now = Date.now(),
 ): Promise<string> {
   const limits = { ...IMPORT_LIMITS, ...overrides };
   const existing = (await trackedSlugs(db, [itadId])).get(itadId);
@@ -89,6 +93,6 @@ export async function importOnDemand(
   // Make it show up in search summaries and the home page straight away.
   await linkDlcToBaseGames(db);
   await refreshGameStats(db);
-  await refreshForecasts(db, [result.gameId]);
+  await refreshForecasts(db, [result.gameId], now);
   return result.slug;
 }
