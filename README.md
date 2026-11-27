@@ -2,7 +2,7 @@
 
 Price history for PC games across Steam, GOG, Epic, Humble, Fanatical and Green Man Gaming, plus an estimate of when each game will next go on sale.
 
-Live site: [text](https://pcsalestracker.vercel.app/)
+Live site: [PCSalesTracker](https://pcsalestracker.vercel.app/)
 
 ## Features
 
